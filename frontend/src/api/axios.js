@@ -17,5 +17,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// If a token is expired/invalid, clear it and bounce to login.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      if (window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Export the configured instance for reuse.
 export default api;
