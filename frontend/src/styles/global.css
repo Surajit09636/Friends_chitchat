@@ -1,0 +1,103 @@
+/* Base page styles */
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background: #0e0f13;
+  color: white;
+}
+
+/* Auth page layout */
+
+.login-page {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Auth card container */
+.login-card {
+  background: #16171d;
+  padding: 40px;
+  border-radius: 20px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Input fields */
+.login-card input {
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #222;
+  color: white;
+}
+
+/* Primary action button */
+.login-card button {
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: #00f6a3;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* Disabled button state */
+.login-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Footer link text */
+.auth-footer {
+  margin: 5px 0 0;
+  font-size: 14px;
+  color: #c8c8c8;
+}
+
+/* Auth links */
+.auth-link {
+  color: #00f6a3;
+  text-decoration: none;
+}
+
+/* Hover styling for links */
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+/* Error text */
+.error {
+  color: #ff5c5c;
+  font-size: 14px;
+}
+
+/* Signup success popup */
+.success-popup {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #00f6a3;
+  color: #0e0f13;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  animation: popup-slide-in 0.25s ease-out;
+}
+
+/* Success popup entry animation */
+@keyframes popup-slide-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
