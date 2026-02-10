@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 // API wrapper for registration.
-import { registerUser } from "../api/authApi";
+import { registerUser, requestEmailVerification } from "../api/authApi";
 
 export default function Signup() {
   // Navigation hook.
@@ -17,7 +17,7 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Submit the signup form and redirect to login on success.
+  // Submit the signup form and redirect to verification on success.
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -33,7 +33,14 @@ export default function Signup() {
 
       await registerUser({ name, username, email, password });
 
-      navigate("/login", { state: { signupSuccess: true } });
+      let sendFailed = false;
+      try {
+        await requestEmailVerification(email);
+      } catch (err) {
+        sendFailed = true;
+      }
+
+      navigate("/verify-email", { state: { email, sendFailed } });
     } catch (err) {
       setError("Could not create account");
     } finally {

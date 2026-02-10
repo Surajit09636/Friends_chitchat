@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str
     access_token_expire_minutes: int
+    # SMTP settings for email verification.
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: str
+    smtp_from_email: str
+    smtp_use_tls: bool = True
 
     class Config:
         # Load environment variables from the backend .env file.

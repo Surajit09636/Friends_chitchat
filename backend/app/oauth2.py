@@ -12,14 +12,16 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    # Build the JWT payload and set expiry.
+    # Build the JWT payload and set expiry when configured.
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
-        expires_delta
-        if expires_delta
-        else timedelta(minutes=settings.access_token_expire_minutes)
-    )
-    to_encode.update({"exp": expire})
+    to_encode.update({"iat": datetime.utcnow()})
+    expire = None
+    if expires_delta is not None:
+        expire = datetime.utcnow() + expires_delta
+    elif settings.access_token_expire_minutes and settings.access_token_expire_minutes > 0:
+        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+    if expire is not None:
+        to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 

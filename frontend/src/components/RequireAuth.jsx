@@ -17,7 +17,7 @@ const parseJwtPayload = (token) => {
 
 const isTokenExpired = (token) => {
   const payload = parseJwtPayload(token);
-  if (!payload?.exp) return true;
+  if (!payload?.exp) return false;
   return payload.exp * 1000 < Date.now();
 };
 

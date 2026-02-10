@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 // Auth pages and protected home.
 import Login from "./pages/login";
 import Signup from "./pages/signup";
+import VerifyEmail from "./pages/verifyEmail";
 import Home from "./pages/home";
 import RequireAuth from "./components/RequireAuth";
 
@@ -23,6 +24,7 @@ function App() {
         {/* Auth routes. */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         {/* Catch-all route to handle unknown paths. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

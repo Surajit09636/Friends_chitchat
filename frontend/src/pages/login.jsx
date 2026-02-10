@@ -16,16 +16,22 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showSignupSuccess, setShowSignupSuccess] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   // Show a temporary success message after signup.
   useEffect(() => {
-    if (!location.state?.signupSuccess) return;
+    const message = location.state?.emailVerified
+      ? "Email verified. You can log in."
+      : location.state?.signupSuccess
+      ? "Your account has been created"
+      : "";
 
-    setShowSignupSuccess(true);
+    if (!message) return;
+
+    setToastMessage(message);
 
     const timer = setTimeout(() => {
-      setShowSignupSuccess(false);
+      setToastMessage("");
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -45,7 +51,12 @@ export default function Login() {
 
       navigate("/");
     } catch (err) {
-      setError("Invalid email/username or password");
+      const detail = err.response?.data?.detail;
+      if (detail === "Email not verified") {
+        setError("Email not verified. Please verify first.");
+      } else {
+        setError("Invalid email/username or password");
+      }
     } finally {
       setLoading(false);
     }
@@ -54,9 +65,9 @@ export default function Login() {
   return (
     <div className="login-page">
       {/* One-time signup success toast */}
-      {showSignupSuccess && (
+      {toastMessage && (
         <div className="success-popup" role="alert">
-          Your account has been created
+          {toastMessage}
         </div>
       )}
       {/* Login form */}

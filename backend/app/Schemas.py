@@ -38,3 +38,19 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     # Data extracted from a verified token.
     id: Optional[int] = None
+
+
+class EmailVerificationRequest(BaseModel):
+    # Request a verification code for a given email.
+    email: EmailStr
+
+
+class EmailVerificationConfirm(BaseModel):
+    # Verify an email with a code.
+    email: EmailStr
+    code: str
+
+
+class Message(BaseModel):
+    # Simple message response.
+    message: str

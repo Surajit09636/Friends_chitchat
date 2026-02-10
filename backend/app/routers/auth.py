@@ -29,6 +29,20 @@ def login(user_credentials: Schemas.UserLogin, db: Session = Depends(database.ge
             detail="Invalid email/username or password",
         )
 
+    verified = (
+        db.query(models.UserVerified)
+        .filter(
+            models.UserVerified.owner_id == user.id,
+            models.UserVerified.is_verified.is_(True),
+        )
+        .first()
+    )
+    if not verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified",
+        )
+
     # Issue a JWT access token.
     access_token = oauth2.create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
