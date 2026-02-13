@@ -1,4 +1,4 @@
-# Chatapp
+# Friends Chitchat
 
 Full-stack authentication starter for a chat app. React frontend + FastAPI backend with PostgreSQL, JWT auth, and email verification.
 
