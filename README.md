@@ -1,10 +1,11 @@
-# Friends Chitchat
+# Friend's Chitchat
 
 Full-stack authentication starter for a chat app. React frontend + FastAPI backend with PostgreSQL, JWT auth, and email verification.
 
 **Features**
 - Signup and login with email or username
 - Email verification flow with one-time codes
+- Password reset flow with one-time codes
 - JWT-protected routes and client-side token checks
 - FastAPI REST API with SQLAlchemy models
 - React SPA with guarded home page
@@ -12,7 +13,7 @@ Full-stack authentication starter for a chat app. React frontend + FastAPI backe
 **Tech Stack**
 - Frontend: React (Create React App), React Router, Axios
 - Backend: FastAPI, SQLAlchemy, PostgreSQL, JWT (python-jose), Passlib bcrypt
-- Email: SMTP for verification codes
+- Email: SMTP for verification + reset codes
 
 **Project Structure**
 - `frontend/` React app
@@ -76,11 +77,26 @@ npm start
 - `POST /login` Log in with email or username
 - `POST /verification/request` Send a verification code
 - `POST /verification/confirm` Confirm a verification code
+- `POST /password/forgot` Send a password reset code
+- `POST /password/reset` Confirm reset code + update password
 - `GET /me` Get the current user
 - `GET /` Basic health check
+
+**Frontend Routes**
+- `/` Public landing page
+- `/login` Login page
+- `/signup` Signup page
+- `/forgot-password` Password reset flow
+- `/verify-email` Email verification flow
+- `/home` Protected app home
 
 **Auth Flow**
 1. Sign up with name, username, email, and password.
 2. Request or resend a verification code by email.
 3. Verify the email address with the code.
 4. Log in to access the protected home page.
+
+**Password Reset Flow**
+1. Request a reset code with your email.
+2. Submit the reset code and new password.
+3. Log in with your updated password.
