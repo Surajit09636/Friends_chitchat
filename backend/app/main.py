@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database_configure import models
 from .database_configure.database import engine
-from .routers import auth, user, verification
+from .routers import auth, forgotpassword, user, verification
 
 # Create DB tables on startup (use Alembic for production migrations).
 models.Base.metadata.create_all(bind=engine)
@@ -30,6 +30,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(verification.router)
+app.include_router(forgotpassword.router)
 
 
 @app.get("/")

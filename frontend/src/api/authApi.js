@@ -20,3 +20,11 @@ export const requestEmailVerification = (email) =>
 // Confirm the email verification code.
 export const confirmEmailVerification = (email, code) =>
   api.post("/verification/confirm", { email, code });
+
+// Request a password reset code.
+export const requestPasswordReset = (email) =>
+  api.post("/password/forgot", { email });
+
+// Confirm a password reset with code + new password.
+export const confirmPasswordReset = (email, code, new_password) =>
+  api.post("/password/reset", { email, code, new_password });

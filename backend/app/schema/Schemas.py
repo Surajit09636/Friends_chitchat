@@ -51,6 +51,18 @@ class EmailVerificationConfirm(BaseModel):
     code: str
 
 
+class PasswordResetRequest(BaseModel):
+    # Request a password reset code.
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    # Reset a password with a verification code.
+    email: EmailStr
+    code: str
+    new_password: str
+
+
 class Message(BaseModel):
     # Simple message response.
     message: str

@@ -24,6 +24,8 @@ export default function Login() {
       ? "Email verified. You can log in."
       : location.state?.signupSuccess
       ? "Your account has been created"
+      : location.state?.passwordReset
+      ? "Password updated. You can log in."
       : "";
 
     if (!message) return;
@@ -106,6 +108,12 @@ export default function Login() {
           New here?{" "}
           <Link className="auth-link" to="/signup">
             Create an account
+          </Link>
+        </p>
+        <p className="auth-footer">
+          Forgot your password?{" "}
+          <Link className="auth-link" to="/forgot-password">
+            Reset it
           </Link>
         </p>
       </form>

@@ -6,6 +6,7 @@ import Signup from "./pages/signup";
 import VerifyEmail from "./pages/verifyEmail";
 import Home from "./pages/home";
 import Landing from "./pages/landing";
+import ForgotPassword from "./pages/forgotPassword";
 import RequireAuth from "./components/RequireAuth";
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
         {/* Auth routes. */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         {/* Catch-all route to handle unknown paths. */}
         <Route path="*" element={<Navigate to="/" replace />} />

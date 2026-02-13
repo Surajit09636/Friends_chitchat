@@ -14,7 +14,9 @@ class User(Base):
     password = Column(String, nullable=False)
     username = Column(String, nullable=False, unique=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    
     verification = relationship("UserVerified", back_populates="user", uselist=False)
+    password_reset = relationship("PasswordReset", back_populates="user", uselist=False)
 
 
 class UserVerified(Base):
@@ -28,4 +30,16 @@ class UserVerified(Base):
     verified_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="verification")
+
+
+class PasswordReset(Base):
+    # ORM model for password reset requests.
+    __tablename__ = "password_resets"
+    id = Column(Integer, primary_key=True, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    code = Column(String, nullable=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    used_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="password_reset")
      
