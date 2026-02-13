@@ -13,6 +13,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  animation: auth-page-fade 0.3s ease-out;
 }
 
 /* Auth card container */
@@ -24,6 +25,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  animation: auth-card-rise 0.45s ease-out;
 }
 
 /* Input fields */
@@ -99,5 +101,33 @@ body {
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+/* Smooth auth page transitions */
+@keyframes auth-page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes auth-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page,
+  .login-card {
+    animation: none;
   }
 }

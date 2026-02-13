@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import models
-from .database import engine
+from .database_configure import models
+from .database_configure.database import engine
 from .routers import auth, user, verification
 
 # Create DB tables on startup (use Alembic for production migrations).
@@ -35,4 +35,4 @@ app.include_router(verification.router)
 @app.get("/")
 def root():
     # Basic health-check endpoint.
-    return {"message": "Hello World"}
+    return 

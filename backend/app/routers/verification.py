@@ -6,8 +6,10 @@ from email.message import EmailMessage
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import Schemas, database, models
-from ..config import settings
+from ..database_configure import database, models
+
+from ..schema import Schemas
+from ..configaration.config import settings
 
 # Verification-related endpoints.
 router = APIRouter(tags=["Verification"])

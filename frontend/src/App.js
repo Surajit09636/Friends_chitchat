@@ -5,6 +5,7 @@ import Login from "./pages/login";
 import Signup from "./pages/signup";
 import VerifyEmail from "./pages/verifyEmail";
 import Home from "./pages/home";
+import Landing from "./pages/landing";
 import RequireAuth from "./components/RequireAuth";
 
 function App() {
@@ -12,9 +13,11 @@ function App() {
     // Top-level router context for the app.
     <BrowserRouter>
       <Routes>
+        {/* Public landing page. */}
+        <Route path="/" element={<Landing />} />
         {/* Protected home route. */}
         <Route
-          path="/"
+          path="/home"
           element={
             <RequireAuth>
               <Home />

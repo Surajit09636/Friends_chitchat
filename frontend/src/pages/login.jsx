@@ -49,7 +49,8 @@ export default function Login() {
 
       login(res.data.access_token, identifier);
 
-      navigate("/");
+      const destination = location.state?.from?.pathname || "/home";
+      navigate(destination);
     } catch (err) {
       const detail = err.response?.data?.detail;
       if (detail === "Email not verified") {

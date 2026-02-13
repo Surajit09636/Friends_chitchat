@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .. import Schemas, database, models, oauth2, utils
+from ..authentication import oauth2, utils
+
+from ..database_configure import database, models
+
+from ..schema import Schemas
 
 # Auth-related endpoints.
 router = APIRouter(tags=["Authentication"])
