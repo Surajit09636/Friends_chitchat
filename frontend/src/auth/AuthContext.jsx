@@ -1,5 +1,6 @@
 // React context and hooks for auth state management.
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { getMe } from "../api/authApi";
 
 // Create a context to share auth state and actions.
 const AuthContext = createContext();
@@ -8,10 +9,20 @@ export function AuthProvider({ children }) {
   // Track the current user (null when logged out).
   const [user, setUser] = useState(null);
 
+  const fetchUserProfile = async () => {
+    try {
+      const res = await getMe();
+      setUser(res.data);
+    } catch (err) {
+      setUser(null);
+    }
+  };
+
   // Save token and user identifier after successful login.
   const login = (token, identifier) => {
     localStorage.setItem("token", token);
     setUser({ identifier });
+    fetchUserProfile();
   };
 
   // Clear token and user state on logout.
@@ -19,6 +30,12 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("token");
     setUser(null);
   };
+
+  useEffect(() => {
+    if (localStorage.getItem("token")) {
+      fetchUserProfile();
+    }
+  }, []);
 
   return (
     // Expose auth state and actions to descendants.
