@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 // API and auth context.
 import { loginUser } from "../api/authApi";
 import { useAuth } from "../auth/AuthContext";
+import PasswordInput from "../components/PasswordInput";
 
 export default function Login() {
   // Navigation and context hooks.
@@ -90,12 +91,13 @@ export default function Login() {
         />
 
         {/* Password input */}
-        <input
-          type="password"
+        <PasswordInput
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          autoComplete="current-password"
+          name="password"
         />
 
         {/* Submit button */}

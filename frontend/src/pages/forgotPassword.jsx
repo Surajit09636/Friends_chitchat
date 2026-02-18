@@ -4,6 +4,7 @@ import {
   confirmPasswordReset,
   requestPasswordReset,
 } from "../api/authApi";
+import PasswordInput from "../components/PasswordInput";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -92,19 +93,21 @@ export default function ForgotPassword() {
               onChange={(e) => setCode(e.target.value)}
               required
             />
-            <input
-              type="password"
+            <PasswordInput
               placeholder="New password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
+              autoComplete="new-password"
+              name="newPassword"
             />
-            <input
-              type="password"
+            <PasswordInput
               placeholder="Confirm new password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              autoComplete="new-password"
+              name="confirmPassword"
             />
           </>
         )}

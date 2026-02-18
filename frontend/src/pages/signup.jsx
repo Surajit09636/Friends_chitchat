@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 // API wrapper for registration.
 import { registerUser, requestEmailVerification } from "../api/authApi";
+import PasswordInput from "../components/PasswordInput";
 
 export default function Signup() {
   // Navigation hook.
@@ -85,21 +86,23 @@ export default function Signup() {
         />
 
         {/* Password input */}
-        <input
-          type="password"
+        <PasswordInput
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          autoComplete="new-password"
+          name="password"
         />
 
         {/* Confirm password input */}
-        <input
-          type="password"
+        <PasswordInput
           placeholder="Confirm password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
+          autoComplete="new-password"
+          name="confirmPassword"
         />
 
         {/* Submit button */}

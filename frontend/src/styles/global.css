@@ -37,8 +37,48 @@ body {
   color: white;
 }
 
+/* Password field with toggle */
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #c8c8c8;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.password-toggle:hover {
+  color: #00f6a3;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid #00f6a3;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 /* Primary action button */
-.login-card button {
+.login-card button:not(.password-toggle) {
   padding: 10px;
   border: none;
   border-radius: 10px;
@@ -48,7 +88,7 @@ body {
 }
 
 /* Disabled button state */
-.login-card button:disabled {
+.login-card button:not(.password-toggle):disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
