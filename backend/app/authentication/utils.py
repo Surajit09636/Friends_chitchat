@@ -12,3 +12,8 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     # Compare a plain-text password with its hashed version.
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def normalize_email(email: str) -> str:
+    # Normalize emails to prevent case/whitespace duplicates.
+    return email.strip().lower()

@@ -47,7 +47,8 @@ def send_reset_email(recipient: str, code: str) -> None:
 @router.post("/password/forgot", response_model=Schemas.Message)
 def request_password_reset(payload: Schemas.PasswordResetRequest,db: Session = Depends(database.get_db),):
     # Create or refresh a password reset code and email it to the user.
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    normalized_email = utils.normalize_email(payload.email)
+    user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -87,7 +88,8 @@ def confirm_password_reset(
     db: Session = Depends(database.get_db),
 ):
     # Validate a reset code and update the user password.
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    normalized_email = utils.normalize_email(payload.email)
+    user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"

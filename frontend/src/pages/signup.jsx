@@ -43,7 +43,14 @@ export default function Signup() {
 
       navigate("/verify-email", { state: { email, sendFailed } });
     } catch (err) {
-      setError("Could not create account");
+      const statusCode = err.response?.status;
+      const detail = err.response?.data?.detail;
+
+      if (statusCode === 409 && detail) {
+        setError(detail);
+      } else {
+        setError("Could not create account");
+      }
     } finally {
       setLoading(false);
     }

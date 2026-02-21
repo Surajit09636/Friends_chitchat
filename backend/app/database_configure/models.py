@@ -23,7 +23,7 @@ class UserVerified(Base):
     # ORM model for verified users.
     __tablename__ = "verified_users"
     id = Column(Integer, primary_key=True, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     is_verified = Column(Boolean, default=False)
     code = Column(String, nullable=True)
     expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -36,10 +36,18 @@ class PasswordReset(Base):
     # ORM model for password reset requests.
     __tablename__ = "password_resets"
     id = Column(Integer, primary_key=True, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     code = Column(String, nullable=True)
     expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
     used_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="password_reset")
      
+class chatting(Base):
+    #ORM table for chatting
+    __tablename__ = "chatting"
+    id = Column(Integer, primary_key=True, nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    message = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))

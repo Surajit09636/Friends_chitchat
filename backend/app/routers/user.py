@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..authentication import oauth2, utils
@@ -15,33 +16,48 @@ router = APIRouter(tags=["Users"])
 @router.post("/signup", response_model=Schemas.UserOut, status_code=status.HTTP_201_CREATED)
 def register(user: Schemas.UserCreate, db: Session = Depends(database.get_db)):
     # Ensure email/username are unique.
-    existing_user = (
+    normalized_email = utils.normalize_email(user.email)
+    normalized_username = user.username.strip()
+
+    email_exists = (
         db.query(models.User)
-        .filter(
-            or_(
-                models.User.email == user.email,
-                models.User.username == user.username,
-            )
-        )
+        .filter(func.lower(models.User.email) == normalized_email)
         .first()
     )
-
-    if existing_user:
+    if email_exists:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email or username already registered",
+            detail="Email already registered",
+        )
+
+    username_exists = (
+        db.query(models.User)
+        .filter(models.User.username == normalized_username)
+        .first()
+    )
+    if username_exists:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already registered",
         )
 
     # Hash the password before saving.
     hashed_password = utils.hash_password(user.password)
     new_user = models.User(
-        email=user.email,
-        username=user.username,
+        email=normalized_email,
+        username=normalized_username,
         name=user.name,
         password=hashed_password,
     )
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email or username already registered",
+        )
     db.refresh(new_user)
     return new_user
 

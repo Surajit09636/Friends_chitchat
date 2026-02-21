@@ -15,12 +15,14 @@ router = APIRouter(tags=["Authentication"])
 @router.post("/login", response_model=Schemas.Token)
 def login(user_credentials: Schemas.UserLogin, db: Session = Depends(database.get_db)):
     # Look up the user by email or username.
+    identifier = user_credentials.email.strip()
+    normalized_email = utils.normalize_email(identifier)
     user = (
         db.query(models.User)
         .filter(
             or_(
-                models.User.email == user_credentials.email,
-                models.User.username == user_credentials.email,
+                models.User.email == normalized_email,
+                models.User.username == identifier,
             )
         )
         .first()
