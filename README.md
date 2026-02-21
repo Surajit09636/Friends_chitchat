@@ -4,6 +4,7 @@ Full-stack authentication starter for a chat app. React frontend + FastAPI backe
 
 **Features**
 - Signup and login with email or username
+- Case-insensitive email uniqueness enforcement
 - Email verification flow with one-time codes
 - Password reset flow with one-time codes
 - JWT-protected routes and client-side token checks
@@ -95,6 +96,9 @@ npm start
 2. Request or resend a verification code by email.
 3. Verify the email address with the code.
 4. Log in to access the protected home page.
+
+**Notes**
+- Emails are normalized (trimmed + lowercased) and must be unique. Attempts to reuse the same email will return a `409` response.
 
 **Password Reset Flow**
 1. Request a reset code with your email.
