@@ -23,6 +23,16 @@ class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserSummary(BaseModel):
+    # Lightweight user info for search results.
+    id: int
+    username: str
+    name: Optional[str] = None
+    email: EmailStr
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserLogin(BaseModel):
     # Login credentials (email or username + password).
     email: str

@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -60,6 +60,34 @@ def register(user: Schemas.UserCreate, db: Session = Depends(database.get_db)):
         )
     db.refresh(new_user)
     return new_user
+
+# route for searching users by name, username or email
+@router.get("/users/search", response_model=list[Schemas.UserSummary])
+def search_users(
+    q: str = Query("", max_length=60),
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    query = q.strip()
+    if len(query) < 2:
+        return []
+
+    pattern = f"%{query}%"
+    users = (
+        db.query(models.User)
+        .filter(
+            models.User.id != current_user.id,
+            or_(
+                models.User.name.ilike(pattern),
+                models.User.username.ilike(pattern),
+                models.User.email.ilike(pattern),
+            ),
+        )
+        .order_by(models.User.username.asc())
+        .limit(20)
+        .all()
+    )
+    return users
 
 
 @router.get("/me", response_model=Schemas.UserOut)

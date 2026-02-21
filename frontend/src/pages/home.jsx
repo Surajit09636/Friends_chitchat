@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { searchUsers } from "../api/authApi";
 import "../styles/chat.css";
 
 const initialThreads = [
@@ -113,6 +114,14 @@ const formatDisplayName = (identifier) => {
   return identifier.includes("@") ? identifier.split("@")[0] : identifier;
 };
 
+const getInitials = (label) =>
+  label
+    .split(" ")
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
 export default function Home() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -121,11 +130,26 @@ export default function Home() {
   const [activeId, setActiveId] = useState(initialThreads[0]?.id ?? null);
   const [draft, setDraft] = useState("");
   const [theme, setTheme] = useState("light");
+  const [chatQuery, setChatQuery] = useState("");
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+  const [friendQuery, setFriendQuery] = useState("");
+  const [friendResults, setFriendResults] = useState([]);
+  const [friendError, setFriendError] = useState("");
+  const [friendLoading, setFriendLoading] = useState(false);
 
   const activeThread = threads.find((thread) => thread.id === activeId);
   const activeMessages = activeId ? messages[activeId] ?? [] : [];
   const displayName =
     user?.username || formatDisplayName(user?.identifier) || "";
+  const filteredThreads = threads.filter((thread) => {
+    if (!chatQuery.trim()) return true;
+    const query = chatQuery.trim().toLowerCase();
+    return (
+      thread.name.toLowerCase().includes(query) ||
+      thread.lastMessage.toLowerCase().includes(query) ||
+      thread.status.toLowerCase().includes(query)
+    );
+  });
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("theme");
@@ -137,6 +161,38 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!isNewChatOpen) {
+      setFriendResults([]);
+      setFriendError("");
+      setFriendLoading(false);
+      return;
+    }
+
+    const query = friendQuery.trim();
+    if (query.length < 2) {
+      setFriendResults([]);
+      setFriendError("");
+      setFriendLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setFriendLoading(true);
+        setFriendError("");
+        const res = await searchUsers(query);
+        setFriendResults(res.data ?? []);
+      } catch (err) {
+        setFriendError("Could not fetch users");
+      } finally {
+        setFriendLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [friendQuery, isNewChatOpen]);
 
   const handleLogout = () => {
     logout();
@@ -150,6 +206,35 @@ export default function Home() {
         thread.id === id ? { ...thread, unread: 0 } : thread
       )
     );
+  };
+
+  const handleStartChat = (friend) => {
+    const existingThread = threads.find((thread) => thread.id === friend.id);
+    if (existingThread) {
+      handleSelectThread(existingThread.id);
+      setIsNewChatOpen(false);
+      setFriendQuery("");
+      setChatQuery("");
+      return;
+    }
+
+    const label = friend.name?.trim() || friend.username;
+    const status = friend.username ? `@${friend.username}` : "Friend";
+    const newThread = {
+      id: friend.id,
+      name: label,
+      status,
+      lastMessage: "Start the conversation",
+      lastTime: "now",
+      unread: 0,
+    };
+
+    setThreads((prev) => [newThread, ...prev]);
+    setMessages((prev) => ({ ...prev, [friend.id]: [] }));
+    setActiveId(friend.id);
+    setIsNewChatOpen(false);
+    setFriendQuery("");
+    setChatQuery("");
   };
 
   const handleSend = (event) => {
@@ -207,46 +292,124 @@ export default function Home() {
               <p className="chat-kicker">Conversations</p>
               <h2>Inbox</h2>
             </div>
-            <button className="chat-chip" type="button">
-              New chat
+            <button
+              className={`chat-chip${isNewChatOpen ? " is-active" : ""}`}
+              type="button"
+              onClick={() => setIsNewChatOpen((prev) => !prev)}
+            >
+              {isNewChatOpen ? "Close" : "New chat"}
             </button>
           </div>
 
+          {isNewChatOpen && (
+            <div className="chat-new">
+              <div className="chat-new__header">
+                <div>
+                  <p className="chat-kicker">New chat</p>
+                  <h3>Find friends</h3>
+                </div>
+                <span className="chat-new__count">
+                  {friendResults.length} found
+                </span>
+              </div>
+
+              <label className="chat-search">
+                <span className="chat-search__label">Search friends</span>
+                <input
+                  type="search"
+                  placeholder="Search by name, username, or email"
+                  value={friendQuery}
+                  onChange={(event) => setFriendQuery(event.target.value)}
+                />
+              </label>
+
+              <div className="chat-friend-list">
+                {friendError ? (
+                  <p className="chat-empty-state">{friendError}</p>
+                ) : friendLoading ? (
+                  <p className="chat-empty-state">Searching...</p>
+                ) : friendQuery.trim().length < 2 ? (
+                  <p className="chat-empty-state">
+                    Type at least 2 characters to search.
+                  </p>
+                ) : friendResults.length === 0 ? (
+                  <p className="chat-empty-state">No users found.</p>
+                ) : (
+                  friendResults.map((friend) => {
+                    const exists = threads.some(
+                      (thread) => thread.id === friend.id
+                    );
+                    const label = friend.name?.trim() || friend.username;
+                    const meta = friend.email
+                      ? `@${friend.username} | ${friend.email}`
+                      : `@${friend.username}`;
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        className="chat-friend"
+                        onClick={() => handleStartChat(friend)}
+                      >
+                        <div className="chat-friend__avatar">
+                          {getInitials(label)}
+                        </div>
+                        <div className="chat-friend__body">
+                          <span className="chat-friend__name">{label}</span>
+                          <span className="chat-friend__status">{meta}</span>
+                        </div>
+                        <span className="chat-friend__action">
+                          {exists ? "Open" : "Start"}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
           <label className="chat-search">
             <span className="chat-search__label">Search</span>
-            <input type="search" placeholder="Find a chat" />
+            <input
+              type="search"
+              placeholder="Find a chat"
+              value={chatQuery}
+              onChange={(event) => setChatQuery(event.target.value)}
+            />
           </label>
 
           <div className="chat-list">
-            {threads.map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                className={`chat-thread${
-                  thread.id === activeId ? " is-active" : ""
-                }`}
-                onClick={() => handleSelectThread(thread.id)}
-              >
-                <div className="chat-thread__avatar">
-                  {thread.name
-                    .split(" ")
-                    .map((word) => word[0])
-                    .slice(0, 2)
-                    .join("")}
-                </div>
-                <div className="chat-thread__body">
-                  <div className="chat-thread__top">
-                    <span className="chat-thread__name">{thread.name}</span>
-                    <span className="chat-thread__time">{thread.lastTime}</span>
+            {filteredThreads.length === 0 ? (
+              <p className="chat-empty-state">No chats match that search.</p>
+            ) : (
+              filteredThreads.map((thread) => (
+                <button
+                  key={thread.id}
+                  type="button"
+                  className={`chat-thread${
+                    thread.id === activeId ? " is-active" : ""
+                  }`}
+                  onClick={() => handleSelectThread(thread.id)}
+                >
+                  <div className="chat-thread__avatar">
+                    {getInitials(thread.name)}
                   </div>
-                  <p className="chat-thread__preview">{thread.lastMessage}</p>
-                  <span className="chat-thread__status">{thread.status}</span>
-                </div>
-                {thread.unread > 0 && (
-                  <span className="chat-thread__unread">{thread.unread}</span>
-                )}
-              </button>
-            ))}
+                  <div className="chat-thread__body">
+                    <div className="chat-thread__top">
+                      <span className="chat-thread__name">{thread.name}</span>
+                      <span className="chat-thread__time">
+                        {thread.lastTime}
+                      </span>
+                    </div>
+                    <p className="chat-thread__preview">{thread.lastMessage}</p>
+                    <span className="chat-thread__status">{thread.status}</span>
+                  </div>
+                  {thread.unread > 0 && (
+                    <span className="chat-thread__unread">{thread.unread}</span>
+                  )}
+                </button>
+              ))
+            )}
           </div>
 
           <div className="chat-settings">

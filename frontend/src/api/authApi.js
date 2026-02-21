@@ -13,6 +13,10 @@ export const registerUser = (data) =>
 export const getMe = () =>
   api.get("/me");
 
+// Search users for new chats.
+export const searchUsers = (query) =>
+  api.get("/users/search", { params: { q: query } });
+
 // Request an email verification code.
 export const requestEmailVerification = (email) =>
   api.post("/verification/request", { email });
