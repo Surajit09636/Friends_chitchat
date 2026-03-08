@@ -1,6 +1,7 @@
 // React context and hooks for auth state management.
 import { createContext, useContext, useEffect, useState } from "react";
 import { getMe } from "../api/authApi";
+import { useCrypto } from "../crypto/CryptoContext";
 
 // Create a context to share auth state and actions.
 const AuthContext = createContext();
@@ -8,6 +9,7 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   // Track the current user (null when logged out).
   const [user, setUser] = useState(null);
+  const { reset: resetCrypto } = useCrypto();
 
   const fetchUserProfile = async () => {
     try {
@@ -28,6 +30,8 @@ export function AuthProvider({ children }) {
   // Clear token and user state on logout.
   const logout = () => {
     localStorage.removeItem("token");
+    // Also clear any in-memory encryption keys.
+    resetCrypto();
     setUser(null);
   };
 

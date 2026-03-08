@@ -4,13 +4,15 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 // API and auth context.
 import { loginUser } from "../api/authApi";
 import { useAuth } from "../auth/AuthContext";
+import { useCrypto } from "../crypto/CryptoContext";
 import PasswordInput from "../components/PasswordInput";
 
 export default function Login() {
   // Navigation and context hooks.
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
+  const { unlockWithPassword } = useCrypto();
 
   // Form state.
   const [identifier, setIdentifier] = useState("");
@@ -51,6 +53,13 @@ export default function Login() {
       const res = await loginUser({ email: identifier, password });
 
       login(res.data.access_token, identifier);
+
+      const unlocked = await unlockWithPassword(password);
+      if (!unlocked) {
+        logout();
+        setError("Unable to unlock encryption keys");
+        return;
+      }
 
       const destination = location.state?.from?.pathname || "/home";
       navigate(destination);

@@ -3,13 +3,13 @@
 Full-stack authentication starter for a chat app. React frontend + FastAPI backend with PostgreSQL, JWT auth, and email verification.
 
 **Features**
-- Signup and login with email or username
-- Case-insensitive email uniqueness enforcement
-- Email verification flow with one-time codes
-- Password reset flow with one-time codes
-- JWT-protected routes and client-side token checks
-- FastAPI REST API with SQLAlchemy models
-- React SPA with guarded home page
+- Signup and login with email or username: Create accounts and authenticate using either an email address or a username.
+- Case-insensitive email uniqueness enforcement: Emails are normalized so duplicates like `User@x.com` and `user@x.com` are rejected.
+- Email verification flow with one-time codes: New users receive a one-time code to confirm ownership of their email.
+- Password reset flow with one-time codes: Users can request a reset code and set a new password without exposing the old one.
+- JWT-protected routes and client-side token checks: The API enforces JWT auth on protected endpoints and the client guards routes based on token presence.
+- FastAPI REST API with SQLAlchemy models: Backend endpoints are built with FastAPI and data models use SQLAlchemy ORM.
+- React SPA with guarded home page: The frontend is a single-page app and the home page is only accessible after login.
 
 **Tech Stack**
 - Frontend: React (Create React App), React Router, Axios
@@ -74,22 +74,32 @@ npm start
 ```
 
 **API Endpoints**
-- `POST /signup` Register a new user
-- `POST /login` Log in with email or username
-- `POST /verification/request` Send a verification code
-- `POST /verification/confirm` Confirm a verification code
-- `POST /password/forgot` Send a password reset code
-- `POST /password/reset` Confirm reset code + update password
-- `GET /me` Get the current user
-- `GET /` Basic health check
+- `POST /signup` Register a new user.
+- `POST /login` Log in with email or username and receive a JWT.
+- `GET /me` Return the authenticated user profile.
+- `GET /users/search?q=...` Search users by name, username, or email (min 2 chars).
+- `POST /verification/request` Send an email verification code.
+- `POST /verification/confirm` Confirm email verification with a code.
+- `POST /password/forgot` Send a password reset code.
+- `POST /password/reset` Confirm reset code and update the password.
+- `POST /friends/{friend_id}` Add a user as a friend.
+- `GET /friends` List your friends.
+- `GET /chats` List chat threads with last message metadata.
+- `GET /chats/{friend_id}/messages` List message history with a friend.
+- `POST /chats/{friend_id}/messages` Send an encrypted message (HTTP fallback).
+- `GET /crypto/profile` Get the current user's E2EE key bundle.
+- `POST /crypto/profile` Create/update the current user's E2EE key bundle.
+- `WS /ws/messages` WebSocket for realtime encrypted messaging.
+- `GET /` Basic health check.
 
 **Frontend Routes**
-- `/` Public landing page
-- `/login` Login page
-- `/signup` Signup page
-- `/forgot-password` Password reset flow
-- `/verify-email` Email verification flow
-- `/home` Protected app home
+- `/` Public landing page.
+- `/login` Login page.
+- `/signup` Signup page.
+- `/forgot-password` Password reset flow.
+- `/verify-email` Email verification flow.
+- `/home` Protected app home.
+- `*` Any unknown route redirects to `/`.
 
 **Auth Flow**
 1. Sign up with name, username, email, and password.

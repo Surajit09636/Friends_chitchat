@@ -1,113 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { searchUsers } from "../api/authApi";
+import {
+  addFriend,
+  getChatMessages,
+  getChatThreads,
+  searchUsers,
+} from "../api/authApi";
+import { createMessageSocket } from "../api/ws";
+import { useCrypto } from "../crypto/CryptoContext";
 import "../styles/chat.css";
 
-const initialThreads = [
-  {
-    id: "studio",
-    name: "Studio Squad",
-    status: "Planning sprint",
-    lastMessage: "I will mock the new hero copy now.",
-    lastTime: "2m",
-    unread: 2,
-  },
-  {
-    id: "saira",
-    name: "Saira Patel",
-    status: "Design lead",
-    lastMessage: "Can you review the motion pass?",
-    lastTime: "18m",
-    unread: 0,
-  },
-  {
-    id: "ops",
-    name: "Ops Lounge",
-    status: "Launch support",
-    lastMessage: "Pager quiet so far, fingers crossed.",
-    lastTime: "1h",
-    unread: 3,
-  },
-  {
-    id: "buddy",
-    name: "Buddy",
-    status: "Friend",
-    lastMessage: "Movie night this weekend?",
-    lastTime: "3h",
-    unread: 0,
-  },
-];
-
-const initialMessages = {
-  studio: [
-    {
-      id: 1,
-      author: "Mia",
-      text: "Morning! Can we keep the hero section light and friendly?",
-      time: "9:12 AM",
-      mine: false,
-    },
-    {
-      id: 2,
-      author: "You",
-      text: "Yep. I will draft 2 options and share by lunch.",
-      time: "9:14 AM",
-      mine: true,
-    },
-    {
-      id: 3,
-      author: "Mia",
-      text: "Perfect. Also add a quick line about secure chats.",
-      time: "9:15 AM",
-      mine: false,
-    },
-  ],
-  saira: [
-    {
-      id: 1,
-      author: "Saira",
-      text: "Can you review the motion pass?",
-      time: "8:42 AM",
-      mine: false,
-    },
-    {
-      id: 2,
-      author: "You",
-      text: "On it. I will send notes shortly.",
-      time: "8:44 AM",
-      mine: true,
-    },
-  ],
-  ops: [
-    {
-      id: 1,
-      author: "Ravi",
-      text: "Launch checklist done. Keep an eye on login errors.",
-      time: "7:20 AM",
-      mine: false,
-    },
-    {
-      id: 2,
-      author: "You",
-      text: "Copy that. I will monitor dashboards.",
-      time: "7:22 AM",
-      mine: true,
-    },
-  ],
-  buddy: [
-    {
-      id: 1,
-      author: "Buddy",
-      text: "Movie night this weekend?",
-      time: "6:10 AM",
-      mine: false,
-    },
-  ],
+const formatTimestamp = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
-
-const formatNow = () =>
-  new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 const formatDisplayName = (identifier) => {
   if (!identifier) return "";
@@ -125,9 +34,17 @@ const getInitials = (label) =>
 export default function Home() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
-  const [threads, setThreads] = useState(initialThreads);
-  const [messages, setMessages] = useState(initialMessages);
-  const [activeId, setActiveId] = useState(initialThreads[0]?.id ?? null);
+  const {
+    ready: cryptoReady,
+    loading: cryptoLoading,
+    error: cryptoError,
+    unlockWithPassword,
+    encryptForFriend,
+    decryptForFriend,
+  } = useCrypto();
+  const [threads, setThreads] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState("");
   const [theme, setTheme] = useState("light");
   const [chatQuery, setChatQuery] = useState("");
@@ -136,20 +53,47 @@ export default function Home() {
   const [friendResults, setFriendResults] = useState([]);
   const [friendError, setFriendError] = useState("");
   const [friendLoading, setFriendLoading] = useState(false);
+  const [loadingThreads, setLoadingThreads] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+  const [socketStatus, setSocketStatus] = useState("disconnected");
 
-  const activeThread = threads.find((thread) => thread.id === activeId);
-  const activeMessages = activeId ? messages[activeId] ?? [] : [];
+  // Refs keep the WebSocket handlers in sync with latest state.
+  const socketRef = useRef(null);
+  const threadsRef = useRef([]);
+  const activeIdRef = useRef(null);
+
+  const activeThread = threads.find(
+    (thread) => thread.friend?.id === activeId
+  );
+  const activeMessages = messages ?? [];
   const displayName =
     user?.username || formatDisplayName(user?.identifier) || "";
   const filteredThreads = threads.filter((thread) => {
     if (!chatQuery.trim()) return true;
     const query = chatQuery.trim().toLowerCase();
+    const label =
+      thread.friend?.name?.trim() || thread.friend?.username || "";
+    const preview = thread.last_preview || "";
+    const status = thread.friend?.username
+      ? `@${thread.friend.username}`
+      : "";
     return (
-      thread.name.toLowerCase().includes(query) ||
-      thread.lastMessage.toLowerCase().includes(query) ||
-      thread.status.toLowerCase().includes(query)
+      label.toLowerCase().includes(query) ||
+      preview.toLowerCase().includes(query) ||
+      status.toLowerCase().includes(query)
     );
   });
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("theme");
@@ -161,6 +105,239 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  const handleIncomingMessage = useCallback(
+    async (payload) => {
+      if (payload.type === "error") {
+        setChatError(payload.detail || "Message error");
+        return;
+      }
+
+      if (payload.type !== "message") return;
+
+      const message = payload.message;
+      const friendId =
+        message.sender_id === user?.id
+          ? message.receiver_id
+          : message.sender_id;
+      const thread = threadsRef.current.find(
+        (item) => item.friend?.id === friendId
+      );
+      const friendPublicKey = thread?.friend?.public_key;
+
+      let text = "[Encrypted message]";
+      if (friendPublicKey) {
+        try {
+          text = await decryptForFriend(
+            friendId,
+            friendPublicKey,
+            message.ciphertext,
+            message.iv
+          );
+        } catch (err) {
+          text = "[Unable to decrypt]";
+        }
+      }
+
+      const messageWithText = { ...message, text };
+
+      // Append to the active thread if it matches.
+      setMessages((prev) =>
+        activeIdRef.current === friendId ? [...prev, messageWithText] : prev
+      );
+
+      // Update the thread list preview + ordering.
+      setThreads((prev) => {
+        const updated = prev.map((threadItem) =>
+          threadItem.friend?.id === friendId
+            ? {
+                ...threadItem,
+                last_message_ciphertext: message.ciphertext,
+                last_message_iv: message.iv,
+                last_message_version: message.crypto_version,
+                last_time: message.created_at,
+                last_preview: text,
+              }
+            : threadItem
+        );
+
+        return updated.sort((a, b) => {
+          const timeA = a.last_time ? new Date(a.last_time).getTime() : 0;
+          const timeB = b.last_time ? new Date(b.last_time).getTime() : 0;
+          return timeB - timeA;
+        });
+      });
+    },
+    [decryptForFriend, user?.id]
+  );
+
+  // Open a message socket after encryption keys are unlocked.
+  useEffect(() => {
+    if (!cryptoReady) return undefined;
+    const token = localStorage.getItem("token");
+    if (!token) return undefined;
+
+    setSocketStatus("connecting");
+    const socket = createMessageSocket(token);
+    socketRef.current = socket;
+
+    socket.onopen = () => setSocketStatus("connected");
+    socket.onclose = () => setSocketStatus("disconnected");
+    socket.onerror = () => setSocketStatus("error");
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        void handleIncomingMessage(payload);
+      } catch (err) {
+        setChatError("Unable to read incoming message");
+      }
+    };
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [cryptoReady, handleIncomingMessage]);
+
+  useEffect(() => {
+    if (!cryptoReady) {
+      setSocketStatus("disconnected");
+    }
+  }, [cryptoReady]);
+
+  const fetchMessages = useCallback(
+    async (friendId, friendPublicKey) => {
+      if (!friendId) {
+        setMessages([]);
+        setLoadingMessages(false);
+        return;
+      }
+
+      if (!cryptoReady) {
+        setMessages([]);
+        setLoadingMessages(false);
+        return;
+      }
+
+      if (!friendPublicKey) {
+        setChatError("Friend has not set up encryption keys yet");
+        setMessages([]);
+        setLoadingMessages(false);
+        return;
+      }
+
+      try {
+        setLoadingMessages(true);
+        setChatError("");
+        const res = await getChatMessages(friendId);
+        const data = res.data ?? [];
+        const decrypted = await Promise.all(
+          data.map(async (message) => {
+            try {
+              const text = await decryptForFriend(
+                friendId,
+                friendPublicKey,
+                message.ciphertext,
+                message.iv
+              );
+              return { ...message, text };
+            } catch (err) {
+              return { ...message, text: "[Unable to decrypt]" };
+            }
+          })
+        );
+        setMessages(decrypted);
+      } catch (err) {
+        setChatError("Could not load messages");
+        setMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
+    },
+    [cryptoReady, decryptForFriend]
+  );
+
+  const decorateThreads = useCallback(
+    async (data) => {
+      // Decrypt last-message previews for the thread list.
+      if (!cryptoReady) {
+        return data.map((thread) => ({
+          ...thread,
+          last_preview: "",
+        }));
+      }
+
+      return Promise.all(
+        data.map(async (thread) => {
+          const ciphertext = thread.last_message_ciphertext;
+          const iv = thread.last_message_iv;
+          const friendPublicKey = thread.friend?.public_key;
+
+          if (!ciphertext || !iv || !friendPublicKey) {
+            return {
+              ...thread,
+              last_preview: ciphertext ? "[Encrypted message]" : "",
+            };
+          }
+
+          try {
+            const text = await decryptForFriend(
+              thread.friend.id,
+              friendPublicKey,
+              ciphertext,
+              iv
+            );
+            return { ...thread, last_preview: text };
+          } catch (err) {
+            return { ...thread, last_preview: "[Unable to decrypt]" };
+          }
+        })
+      );
+    },
+    [cryptoReady, decryptForFriend]
+  );
+
+  const fetchThreads = useCallback(async (nextActiveId = null) => {
+    try {
+      setLoadingThreads(true);
+      setChatError("");
+      const res = await getChatThreads();
+      const data = res.data ?? [];
+      const decorated = await decorateThreads(data);
+      setThreads(decorated);
+
+      let resolvedActiveId = nextActiveId;
+      if (!resolvedActiveId) {
+        resolvedActiveId = decorated[0]?.friend?.id ?? null;
+      }
+
+      setActiveId(resolvedActiveId);
+      if (resolvedActiveId) {
+        const activeThreadData = decorated.find(
+          (thread) => thread.friend?.id === resolvedActiveId
+        );
+        await fetchMessages(
+          resolvedActiveId,
+          activeThreadData?.friend?.public_key
+        );
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      setChatError("Could not load chats");
+      setThreads([]);
+      setActiveId(null);
+      setMessages([]);
+    } finally {
+      setLoadingThreads(false);
+    }
+  }, [decorateThreads, fetchMessages]);
+
+  useEffect(() => {
+    if (cryptoReady) {
+      fetchThreads();
+    }
+  }, [cryptoReady, fetchThreads]);
 
   useEffect(() => {
     if (!isNewChatOpen) {
@@ -199,83 +376,139 @@ export default function Home() {
     navigate("/login");
   };
 
+  const handleUnlock = async (event) => {
+    event.preventDefault();
+    if (!unlockPassword.trim()) return;
+    setUnlockError("");
+    const unlocked = await unlockWithPassword(unlockPassword);
+    if (!unlocked) {
+      setUnlockError("Unable to unlock encryption keys");
+    } else {
+      setUnlockPassword("");
+    }
+  };
+
   const handleSelectThread = (id) => {
     setActiveId(id);
-    setThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === id ? { ...thread, unread: 0 } : thread
-      )
-    );
+    const selected = threads.find((thread) => thread.friend?.id === id);
+    fetchMessages(id, selected?.friend?.public_key);
   };
 
   const handleStartChat = (friend) => {
-    const existingThread = threads.find((thread) => thread.id === friend.id);
+    const existingThread = threads.find(
+      (thread) => thread.friend?.id === friend.id
+    );
     if (existingThread) {
-      handleSelectThread(existingThread.id);
+      handleSelectThread(existingThread.friend.id);
       setIsNewChatOpen(false);
       setFriendQuery("");
       setChatQuery("");
       return;
     }
 
-    const label = friend.name?.trim() || friend.username;
-    const status = friend.username ? `@${friend.username}` : "Friend";
-    const newThread = {
-      id: friend.id,
-      name: label,
-      status,
-      lastMessage: "Start the conversation",
-      lastTime: "now",
-      unread: 0,
+    const addAndOpen = async () => {
+      try {
+        setFriendError("");
+        await addFriend(friend.id);
+        await fetchThreads(friend.id);
+        setIsNewChatOpen(false);
+        setFriendQuery("");
+        setChatQuery("");
+      } catch (err) {
+        const detail = err.response?.data?.detail;
+        setFriendError(detail || "Could not add friend");
+      }
     };
 
-    setThreads((prev) => [newThread, ...prev]);
-    setMessages((prev) => ({ ...prev, [friend.id]: [] }));
-    setActiveId(friend.id);
-    setIsNewChatOpen(false);
-    setFriendQuery("");
-    setChatQuery("");
+    addAndOpen();
   };
 
   const handleSend = (event) => {
     event.preventDefault();
     const trimmed = draft.trim();
     if (!trimmed || !activeId) return;
+    const send = async () => {
+      try {
+        setChatError("");
 
-    const newMessage = {
-      id: Date.now(),
-      author: "You",
-      text: trimmed,
-      time: formatNow(),
-      mine: true,
+        const activeFriend = activeThread?.friend;
+        if (!activeFriend?.public_key) {
+          setChatError("Friend has not set up encryption keys yet");
+          return;
+        }
+
+        if (socketStatus !== "connected" || !socketRef.current) {
+          setChatError("Message socket is disconnected");
+          return;
+        }
+
+        // Encrypt locally before sending over the WebSocket.
+        const encrypted = await encryptForFriend(
+          activeFriend.id,
+          activeFriend.public_key,
+          trimmed
+        );
+
+        socketRef.current.send(
+          JSON.stringify({
+            type: "message",
+            friend_id: activeFriend.id,
+            ciphertext: encrypted.ciphertext,
+            iv: encrypted.iv,
+          })
+        );
+
+        setDraft("");
+      } catch (err) {
+        setChatError("Could not send message");
+      }
     };
 
-    setMessages((prev) => {
-      const next = { ...prev };
-      const list = prev[activeId] ?? [];
-      next[activeId] = [...list, newMessage];
-      return next;
-    });
-
-    setThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === activeId
-          ? { ...thread, lastMessage: trimmed, lastTime: "now", unread: 0 }
-          : thread
-      )
-    );
-
-    setDraft("");
+    send();
   };
 
   return (
     <div className="chat-page" data-theme={theme}>
+      {!cryptoReady && (
+        <div className="chat-lock" role="dialog" aria-live="polite">
+          <div className="chat-lock__card">
+            <h2>Unlock encrypted chats</h2>
+            <p>
+              Enter your password to decrypt your private key and read messages.
+            </p>
+            {(cryptoError || unlockError) && (
+              <p className="chat-lock__error">
+                {unlockError || cryptoError}
+              </p>
+            )}
+            <form className="chat-lock__form" onSubmit={handleUnlock}>
+              <input
+                type="password"
+                placeholder="Password"
+                value={unlockPassword}
+                onChange={(event) => {
+                  setUnlockPassword(event.target.value);
+                  if (unlockError) setUnlockError("");
+                }}
+                autoComplete="current-password"
+                required
+              />
+              <button type="submit" disabled={cryptoLoading}>
+                {cryptoLoading ? "Unlocking..." : "Unlock"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
       <header className="chat-topbar">
         <div className="chat-brand">
           <span className="chat-brand__dot" />
           Chatspace
         </div>
         <div className="chat-topbar__meta">
+          <span className={`chat-socket chat-socket--${socketStatus}`}>
+            Realtime: {socketStatus}
+          </span>
           {displayName && (
             <span className="chat-user">Signed in as {displayName}</span>
           )}
@@ -337,7 +570,7 @@ export default function Home() {
                 ) : (
                   friendResults.map((friend) => {
                     const exists = threads.some(
-                      (thread) => thread.id === friend.id
+                      (thread) => thread.friend?.id === friend.id
                     );
                     const label = friend.name?.trim() || friend.username;
                     const meta = friend.email
@@ -358,7 +591,7 @@ export default function Home() {
                           <span className="chat-friend__status">{meta}</span>
                         </div>
                         <span className="chat-friend__action">
-                          {exists ? "Open" : "Start"}
+                          {exists ? "Open" : "Add"}
                         </span>
                       </button>
                     );
@@ -379,36 +612,49 @@ export default function Home() {
           </label>
 
           <div className="chat-list">
-            {filteredThreads.length === 0 ? (
+            {loadingThreads ? (
+              <p className="chat-empty-state">Loading chats...</p>
+            ) : threads.length === 0 && !chatQuery.trim() ? (
+              <p className="chat-empty-state">
+                No chats yet. Add friends to start.
+              </p>
+            ) : filteredThreads.length === 0 ? (
               <p className="chat-empty-state">No chats match that search.</p>
             ) : (
-              filteredThreads.map((thread) => (
-                <button
-                  key={thread.id}
-                  type="button"
-                  className={`chat-thread${
-                    thread.id === activeId ? " is-active" : ""
-                  }`}
-                  onClick={() => handleSelectThread(thread.id)}
-                >
-                  <div className="chat-thread__avatar">
-                    {getInitials(thread.name)}
-                  </div>
-                  <div className="chat-thread__body">
-                    <div className="chat-thread__top">
-                      <span className="chat-thread__name">{thread.name}</span>
-                      <span className="chat-thread__time">
-                        {thread.lastTime}
-                      </span>
+              filteredThreads.map((thread) => {
+                const label =
+                  thread.friend?.name?.trim() || thread.friend?.username || "";
+                const status = thread.friend?.username
+                  ? `@${thread.friend.username}`
+                  : "Friend";
+                const preview =
+                  thread.last_preview || "Start the conversation";
+                const lastTime = thread.last_time
+                  ? formatTimestamp(thread.last_time)
+                  : "New";
+                return (
+                  <button
+                    key={thread.friend.id}
+                    type="button"
+                    className={`chat-thread${
+                      thread.friend.id === activeId ? " is-active" : ""
+                    }`}
+                    onClick={() => handleSelectThread(thread.friend.id)}
+                  >
+                    <div className="chat-thread__avatar">
+                      {getInitials(label)}
                     </div>
-                    <p className="chat-thread__preview">{thread.lastMessage}</p>
-                    <span className="chat-thread__status">{thread.status}</span>
-                  </div>
-                  {thread.unread > 0 && (
-                    <span className="chat-thread__unread">{thread.unread}</span>
-                  )}
-                </button>
-              ))
+                    <div className="chat-thread__body">
+                      <div className="chat-thread__top">
+                        <span className="chat-thread__name">{label}</span>
+                        <span className="chat-thread__time">{lastTime}</span>
+                      </div>
+                      <p className="chat-thread__preview">{preview}</p>
+                      <span className="chat-thread__status">{status}</span>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
 
@@ -439,31 +685,49 @@ export default function Home() {
               <div className="chat-main__header">
                 <div>
                   <p className="chat-kicker">Active chat</p>
-                  <h2>{activeThread.name}</h2>
+                  <h2>
+                    {activeThread.friend?.name?.trim() ||
+                      activeThread.friend?.username}
+                  </h2>
                 </div>
                 <div className="chat-status">
                   <span className="chat-status__dot" />
-                  {activeThread.status}
+                  @{activeThread.friend?.username}
                 </div>
               </div>
 
               <div className="chat-messages">
-                {activeMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`chat-message${
-                      message.mine ? " is-me" : ""
-                    }`}
-                  >
-                    {!message.mine && (
-                      <span className="chat-message__author">
-                        {message.author}
-                      </span>
-                    )}
-                    <p className="chat-message__text">{message.text}</p>
-                    <span className="chat-message__time">{message.time}</span>
-                  </div>
-                ))}
+                {chatError && (
+                  <p className="chat-empty-state">{chatError}</p>
+                )}
+                {loadingMessages ? (
+                  <p className="chat-empty-state">Loading messages...</p>
+                ) : chatError ? null : activeMessages.length === 0 ? (
+                  <p className="chat-empty-state">No messages yet.</p>
+                ) : (
+                  activeMessages.map((message) => {
+                    const isMine = message.sender_id === user?.id;
+                    return (
+                      <div
+                        key={message.id}
+                        className={`chat-message${isMine ? " is-me" : ""}`}
+                      >
+                        {!isMine && (
+                          <span className="chat-message__author">
+                            {activeThread.friend?.name?.trim() ||
+                              activeThread.friend?.username}
+                          </span>
+                        )}
+                        <p className="chat-message__text">
+                          {message.text || "[Encrypted message]"}
+                        </p>
+                        <span className="chat-message__time">
+                          {formatTimestamp(message.created_at)}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               <form className="chat-composer" onSubmit={handleSend}>
@@ -473,13 +737,44 @@ export default function Home() {
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                 />
-                <button type="submit">Send</button>
+                <button
+                  type="submit"
+                  disabled={
+                    !draft.trim() ||
+                    !cryptoReady ||
+                    socketStatus !== "connected" ||
+                    !activeThread?.friend?.public_key
+                  }
+                >
+                  Send
+                </button>
               </form>
             </>
           ) : (
             <div className="chat-empty">
-              <h2>Pick a conversation</h2>
-              <p>Choose a thread from the left to start chatting.</p>
+              {chatError ? (
+                <>
+                  <h2>Unable to load chats</h2>
+                  <p>{chatError}</p>
+                </>
+              ) : loadingThreads ? (
+                <>
+                  <h2>Loading chats...</h2>
+                  <p>Fetching your conversations.</p>
+                </>
+              ) : (
+                <>
+                  <h2>No chats yet</h2>
+                  <p>Add friends to start chatting.</p>
+                  <button
+                    type="button"
+                    className="chat-chip"
+                    onClick={() => setIsNewChatOpen(true)}
+                  >
+                    Add friends
+                  </button>
+                </>
+              )}
             </div>
           )}
         </main>

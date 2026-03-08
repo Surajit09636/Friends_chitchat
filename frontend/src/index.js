@@ -5,13 +5,17 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 // Global auth context provider.
 import { AuthProvider } from "./auth/AuthContext";
+// Global crypto context provider.
+import { CryptoProvider } from "./crypto/CryptoContext";
 // Global styles applied across the app.
 import "./styles/global.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  // Provide authentication state to the entire app tree.
-  <AuthProvider>
-    {/* App routes and pages. */}
-    <App />
-  </AuthProvider>
+  // Provide encryption state + authentication state to the app tree.
+  <CryptoProvider>
+    <AuthProvider>
+      {/* App routes and pages. */}
+      <App />
+    </AuthProvider>
+  </CryptoProvider>
 );
