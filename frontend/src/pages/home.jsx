@@ -41,6 +41,9 @@ const getMessageDisplayText = (message) => {
   return message?.text || "[Encrypted message]";
 };
 
+const createNotificationId = () =>
+  `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 export default function Home() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -74,6 +77,7 @@ export default function Home() {
   const [messageMenu, setMessageMenu] = useState(null);
   const [threadMenu, setThreadMenu] = useState(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   // Refs keep the WebSocket handlers in sync with latest state.
   const socketRef = useRef(null);
@@ -87,6 +91,28 @@ export default function Home() {
   const activeMessages = messages ?? [];
   const displayName =
     user?.username || formatDisplayName(user?.identifier) || "";
+  const addNotification = useCallback((text, type = "info") => {
+    const message = text?.trim();
+    if (!message) return;
+
+    setNotifications((prev) =>
+      [
+        {
+          id: createNotificationId(),
+          text: message,
+          type,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ].slice(0, 60)
+    );
+  }, []);
+  const removeNotification = useCallback((id) => {
+    setNotifications((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+  }, []);
   const filteredThreads = threads.filter((thread) => {
     if (!chatQuery.trim()) return true;
     const query = chatQuery.trim().toLowerCase();
@@ -145,7 +171,9 @@ export default function Home() {
   const handleIncomingMessage = useCallback(
     async (payload) => {
       if (payload.type === "error") {
-        setChatError(payload.detail || "Message error");
+        const detail = payload.detail || "Message error";
+        setChatError(detail);
+        addNotification(detail, "error");
         return;
       }
 
@@ -155,6 +183,15 @@ export default function Home() {
         payload.type === "message_deleted_for_me" ||
         payload.type === "conversation_cleared"
       ) {
+        const notificationTextByType = {
+          message_edited: "A message was edited.",
+          message_deleted_for_everyone: "A message was deleted for everyone.",
+          message_deleted_for_me: "A message was deleted for you.",
+          conversation_cleared: "A conversation was cleared.",
+        };
+        addNotification(
+          notificationTextByType[payload.type] || "Conversation updated."
+        );
         await fetchThreadsRef.current(activeIdRef.current);
         return;
       }
@@ -189,6 +226,16 @@ export default function Home() {
 
       const messageWithText = { ...message, text };
 
+      if (message.sender_id !== user?.id) {
+        const friendUsername = thread?.friend?.username || "unknown";
+        const preview = message.is_deleted_for_everyone
+          ? "This message was deleted"
+          : text || "New message";
+        const clippedPreview =
+          preview.length > 72 ? `${preview.slice(0, 72)}...` : preview;
+        addNotification(`@${friendUsername}: ${clippedPreview}`, "message");
+      }
+
       // Append to the active thread if it matches.
       setMessages((prev) =>
         activeIdRef.current === friendId ? [...prev, messageWithText] : prev
@@ -219,7 +266,7 @@ export default function Home() {
         });
       });
     },
-    [decryptForFriend, user?.id]
+    [addNotification, decryptForFriend, user?.id]
   );
 
   // Open a message socket after encryption keys are unlocked.
@@ -241,6 +288,7 @@ export default function Home() {
         void handleIncomingMessage(payload);
       } catch (err) {
         setChatError("Unable to read incoming message");
+        addNotification("Unable to read incoming message", "error");
       }
     };
 
@@ -248,7 +296,7 @@ export default function Home() {
       socket.close();
       socketRef.current = null;
     };
-  }, [cryptoReady, handleIncomingMessage]);
+  }, [addNotification, cryptoReady, handleIncomingMessage]);
 
   useEffect(() => {
     if (!cryptoReady) {
@@ -685,6 +733,72 @@ export default function Home() {
           {displayName && (
             <span className="chat-user">Signed in as {displayName}</span>
           )}
+          <div className="chat-notification-menu" aria-live="polite">
+            <button
+              type="button"
+              className="chat-notification-toggle"
+              aria-label={`Notifications (${notifications.length})`}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 18h5l-1.4-1.4A2 2 0 0 1 18 15.2V11a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 18h5" />
+                <path d="M9 18a3 3 0 0 0 6 0" />
+              </svg>
+              {notifications.length > 0 && (
+                <span className="chat-notification-toggle__badge">
+                  {notifications.length > 99 ? "99+" : notifications.length}
+                </span>
+              )}
+            </button>
+            <div className="chat-notification-panel" role="region" aria-label="Notifications">
+              <div className="chat-notifications__header">
+                <div>
+                  <p className="chat-kicker">Alerts</p>
+                  <h3>Notifications</h3>
+                </div>
+                <button
+                  type="button"
+                  className="chat-notifications__clear"
+                  onClick={clearNotifications}
+                  disabled={notifications.length === 0}
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="chat-notifications__list">
+                {notifications.length === 0 ? (
+                  <p className="chat-notifications__empty">
+                    Notifications will appear here.
+                  </p>
+                ) : (
+                  notifications.map((notification) => (
+                    <article
+                      key={notification.id}
+                      className={`chat-notification chat-notification--${notification.type}`}
+                    >
+                      <p className="chat-notification__text">{notification.text}</p>
+                      <div className="chat-notification__meta">
+                        <span>{formatTimestamp(notification.created_at)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeNotification(notification.id)}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
           <button className="chat-ghost" type="button" onClick={handleLogout}>
             Logout
           </button>
