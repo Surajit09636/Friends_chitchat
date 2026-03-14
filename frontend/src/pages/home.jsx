@@ -679,12 +679,9 @@ export default function Home() {
       <header className="chat-topbar">
         <div className="chat-brand">
           <span className="chat-brand__dot" />
-          Chatspace
+          Chitchat
         </div>
         <div className="chat-topbar__meta">
-          <span className={`chat-socket chat-socket--${socketStatus}`}>
-            Realtime: {socketStatus}
-          </span>
           {displayName && (
             <span className="chat-user">Signed in as {displayName}</span>
           )}
@@ -897,8 +894,8 @@ export default function Home() {
                       >
                         {!isMine && (
                           <span className="chat-message__author">
-                            {activeThread.friend?.name?.trim() ||
-                              activeThread.friend?.username}
+                            {activeThread.friend?.username ||
+                              activeThread.friend?.name?.trim()}
                           </span>
                         )}
                         {isEditing ? (
