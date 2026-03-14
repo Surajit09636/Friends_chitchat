@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
   addFriend,
+  deleteChatMessage,
+  deleteFriendChat,
+  editChatMessage,
   getChatMessages,
   getChatThreads,
   searchUsers,
@@ -30,6 +33,13 @@ const getInitials = (label) =>
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+const getMessageDisplayText = (message) => {
+  if (message?.is_deleted_for_everyone) {
+    return "This message was deleted";
+  }
+  return message?.text || "[Encrypted message]";
+};
 
 export default function Home() {
   const navigate = useNavigate();
@@ -59,11 +69,17 @@ export default function Home() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [socketStatus, setSocketStatus] = useState("disconnected");
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingDraft, setEditingDraft] = useState("");
+  const [messageMenu, setMessageMenu] = useState(null);
+  const [threadMenu, setThreadMenu] = useState(null);
+  const [isActionPending, setIsActionPending] = useState(false);
 
   // Refs keep the WebSocket handlers in sync with latest state.
   const socketRef = useRef(null);
   const threadsRef = useRef([]);
   const activeIdRef = useRef(null);
+  const fetchThreadsRef = useRef(async () => {});
 
   const activeThread = threads.find(
     (thread) => thread.friend?.id === activeId
@@ -96,6 +112,26 @@ export default function Home() {
   }, [activeId]);
 
   useEffect(() => {
+    const clearMenus = () => {
+      setMessageMenu(null);
+      setThreadMenu(null);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      clearMenus();
+      setEditingMessageId(null);
+      setEditingDraft("");
+    };
+
+    window.addEventListener("click", clearMenus);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", clearMenus);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     const storedTheme = localStorage.getItem("theme");
     if (storedTheme === "dark" || storedTheme === "light") {
       setTheme(storedTheme);
@@ -113,6 +149,16 @@ export default function Home() {
         return;
       }
 
+      if (
+        payload.type === "message_edited" ||
+        payload.type === "message_deleted_for_everyone" ||
+        payload.type === "message_deleted_for_me" ||
+        payload.type === "conversation_cleared"
+      ) {
+        await fetchThreadsRef.current(activeIdRef.current);
+        return;
+      }
+
       if (payload.type !== "message") return;
 
       const message = payload.message;
@@ -126,7 +172,9 @@ export default function Home() {
       const friendPublicKey = thread?.friend?.public_key;
 
       let text = "[Encrypted message]";
-      if (friendPublicKey) {
+      if (message.is_deleted_for_everyone) {
+        text = "";
+      } else if (friendPublicKey) {
         try {
           text = await decryptForFriend(
             friendId,
@@ -152,9 +200,12 @@ export default function Home() {
           threadItem.friend?.id === friendId
             ? {
                 ...threadItem,
+                last_message_id: message.id,
                 last_message_ciphertext: message.ciphertext,
                 last_message_iv: message.iv,
                 last_message_version: message.crypto_version,
+                last_message_deleted_for_everyone:
+                  message.is_deleted_for_everyone ?? false,
                 last_time: message.created_at,
                 last_preview: text,
               }
@@ -233,6 +284,9 @@ export default function Home() {
         const data = res.data ?? [];
         const decrypted = await Promise.all(
           data.map(async (message) => {
+            if (message.is_deleted_for_everyone) {
+              return { ...message, text: "" };
+            }
             try {
               const text = await decryptForFriend(
                 friendId,
@@ -272,6 +326,16 @@ export default function Home() {
           const ciphertext = thread.last_message_ciphertext;
           const iv = thread.last_message_iv;
           const friendPublicKey = thread.friend?.public_key;
+          const isDeletedForEveryone = Boolean(
+            thread.last_message_deleted_for_everyone
+          );
+
+          if (isDeletedForEveryone) {
+            return {
+              ...thread,
+              last_preview: "This message was deleted",
+            };
+          }
 
           if (!ciphertext || !iv || !friendPublicKey) {
             return {
@@ -334,6 +398,10 @@ export default function Home() {
   }, [decorateThreads, fetchMessages]);
 
   useEffect(() => {
+    fetchThreadsRef.current = fetchThreads;
+  }, [fetchThreads]);
+
+  useEffect(() => {
     if (cryptoReady) {
       fetchThreads();
     }
@@ -389,6 +457,10 @@ export default function Home() {
   };
 
   const handleSelectThread = (id) => {
+    setMessageMenu(null);
+    setThreadMenu(null);
+    setEditingMessageId(null);
+    setEditingDraft("");
     setActiveId(id);
     const selected = threads.find((thread) => thread.friend?.id === id);
     fetchMessages(id, selected?.friend?.public_key);
@@ -421,6 +493,110 @@ export default function Home() {
     };
 
     addAndOpen();
+  };
+
+  const handleMessageContextMenu = (event, message) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setThreadMenu(null);
+    setMessageMenu({
+      x: event.clientX,
+      y: event.clientY,
+      message,
+    });
+  };
+
+  const handleThreadContextMenu = (event, thread) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMessageMenu(null);
+    setThreadMenu({
+      x: event.clientX,
+      y: event.clientY,
+      thread,
+    });
+  };
+
+  const handleStartEditMessage = (message) => {
+    if (!message) return;
+    if (message.sender_id !== user?.id || message.is_deleted_for_everyone) return;
+    setEditingMessageId(message.id);
+    setEditingDraft(message.text || "");
+    setMessageMenu(null);
+  };
+
+  const handleCancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingDraft("");
+  };
+
+  const handleSaveEditedMessage = async (event, message) => {
+    event.preventDefault();
+    const trimmed = editingDraft.trim();
+    if (!trimmed || !activeThread?.friend) return;
+
+    try {
+      setIsActionPending(true);
+      setChatError("");
+      if (!activeThread.friend.public_key) {
+        setChatError("Friend has not set up encryption keys yet");
+        return;
+      }
+
+      const encrypted = await encryptForFriend(
+        activeThread.friend.id,
+        activeThread.friend.public_key,
+        trimmed
+      );
+      await editChatMessage(activeThread.friend.id, message.id, {
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+      });
+      handleCancelEditMessage();
+      await fetchThreads(activeThread.friend.id);
+    } catch (err) {
+      setChatError("Could not edit message");
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (message, scope = "me") => {
+    if (!activeThread?.friend) return;
+
+    try {
+      setIsActionPending(true);
+      setChatError("");
+      await deleteChatMessage(activeThread.friend.id, message.id, scope);
+      if (editingMessageId === message.id) {
+        handleCancelEditMessage();
+      }
+      setMessageMenu(null);
+      await fetchThreads(activeThread.friend.id);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setChatError(detail || "Could not delete message");
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const handleDeleteThread = async (thread) => {
+    if (!thread?.friend?.id) return;
+
+    try {
+      setIsActionPending(true);
+      setChatError("");
+      await deleteFriendChat(thread.friend.id);
+      setThreadMenu(null);
+      handleCancelEditMessage();
+      await fetchThreads(activeIdRef.current || thread.friend.id);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setChatError(detail || "Could not delete chat");
+    } finally {
+      setIsActionPending(false);
+    }
   };
 
   const handleSend = (event) => {
@@ -640,6 +816,9 @@ export default function Home() {
                       thread.friend.id === activeId ? " is-active" : ""
                     }`}
                     onClick={() => handleSelectThread(thread.friend.id)}
+                    onContextMenu={(event) =>
+                      handleThreadContextMenu(event, thread)
+                    }
                   >
                     <div className="chat-thread__avatar">
                       {getInitials(label)}
@@ -707,10 +886,14 @@ export default function Home() {
                 ) : (
                   activeMessages.map((message) => {
                     const isMine = message.sender_id === user?.id;
+                    const isEditing = editingMessageId === message.id;
                     return (
                       <div
                         key={message.id}
                         className={`chat-message${isMine ? " is-me" : ""}`}
+                        onContextMenu={(event) =>
+                          handleMessageContextMenu(event, message)
+                        }
                       >
                         {!isMine && (
                           <span className="chat-message__author">
@@ -718,9 +901,51 @@ export default function Home() {
                               activeThread.friend?.username}
                           </span>
                         )}
-                        <p className="chat-message__text">
-                          {message.text || "[Encrypted message]"}
-                        </p>
+                        {isEditing ? (
+                          <form
+                            className="chat-message__edit"
+                            onSubmit={(event) =>
+                              handleSaveEditedMessage(event, message)
+                            }
+                          >
+                            <input
+                              type="text"
+                              value={editingDraft}
+                              onChange={(event) =>
+                                setEditingDraft(event.target.value)
+                              }
+                              autoFocus
+                            />
+                            <div className="chat-message__edit-actions">
+                              <button
+                                type="submit"
+                                disabled={
+                                  isActionPending || !editingDraft.trim()
+                                }
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditMessage}
+                                disabled={isActionPending}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <p className="chat-message__text">
+                            {getMessageDisplayText(message)}
+                          </p>
+                        )}
+                        {message.edited_at &&
+                          !message.is_deleted_for_everyone &&
+                          !isEditing && (
+                            <span className="chat-message__edited">
+                              Edited
+                            </span>
+                          )}
                         <span className="chat-message__time">
                           {formatTimestamp(message.created_at)}
                         </span>
@@ -779,6 +1004,62 @@ export default function Home() {
           )}
         </main>
       </section>
+
+      {messageMenu?.message && (
+        <div
+          className="chat-context-menu"
+          style={{ left: messageMenu.x, top: messageMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {messageMenu.message.sender_id === user?.id &&
+            !messageMenu.message.is_deleted_for_everyone && (
+              <button
+                type="button"
+                onClick={() => handleStartEditMessage(messageMenu.message)}
+                disabled={isActionPending}
+              >
+                Edit message
+              </button>
+            )}
+          <button
+            type="button"
+            onClick={() => handleDeleteMessage(messageMenu.message, "me")}
+            disabled={isActionPending}
+          >
+            Delete chat
+          </button>
+          {messageMenu.message.sender_id === user?.id &&
+            !messageMenu.message.is_deleted_for_everyone && (
+              <button
+                type="button"
+                className="is-danger"
+                onClick={() =>
+                  handleDeleteMessage(messageMenu.message, "everyone")
+                }
+                disabled={isActionPending}
+              >
+                Delete from everyone
+              </button>
+            )}
+        </div>
+      )}
+
+      {threadMenu?.thread && (
+        <div
+          className="chat-context-menu"
+          style={{ left: threadMenu.x, top: threadMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="is-danger"
+            onClick={() => handleDeleteThread(threadMenu.thread)}
+            disabled={isActionPending}
+          >
+            Delete entire chat
+          </button>
+        </div>
+      )}
     </div>
   );
 }

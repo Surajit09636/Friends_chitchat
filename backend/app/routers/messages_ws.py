@@ -3,13 +3,10 @@ from sqlalchemy.orm import Session
 
 from ..authentication import oauth2
 from ..database_configure import database, models
-from ..Websocket_configure.manager import ConnectionManager
+from ..Websocket_configure.runtime import manager
 
 # WebSocket router for realtime message delivery.
 router = APIRouter()
-
-# Shared in-memory connection manager.
-manager = ConnectionManager()
 
 
 @router.websocket("/ws/messages")
@@ -107,6 +104,10 @@ async def messages_socket(websocket: WebSocket):
                     "ciphertext": new_message.ciphertext,
                     "iv": new_message.iv,
                     "crypto_version": new_message.crypto_version,
+                    "is_deleted_for_everyone": new_message.is_deleted_for_everyone,
+                    "edited_at": new_message.edited_at.isoformat()
+                    if new_message.edited_at
+                    else None,
                     "created_at": new_message.created_at.isoformat(),
                 },
             }

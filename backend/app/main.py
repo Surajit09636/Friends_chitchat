@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .E2EE import crypto
 
@@ -9,6 +10,22 @@ from .routers import auth, chat, forgotpassword, messages_ws, user, verification
 
 # Create DB tables on startup (use Alembic for production migrations).
 models.Base.metadata.create_all(bind=engine)
+
+
+def ensure_chatting_columns() -> None:
+    # Backfill newer chat columns in existing dev databases.
+    statements = [
+        "ALTER TABLE chatting ADD COLUMN IF NOT EXISTS is_deleted_for_everyone BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE chatting ADD COLUMN IF NOT EXISTS deleted_for_sender BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE chatting ADD COLUMN IF NOT EXISTS deleted_for_receiver BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE chatting ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ",
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+ensure_chatting_columns()
 
 # FastAPI application instance.
 app = FastAPI()

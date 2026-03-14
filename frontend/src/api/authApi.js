@@ -34,6 +34,20 @@ export const getChatMessages = (friendId) =>
 export const sendChatMessage = (friendId, payload) =>
   api.post(`/chats/${friendId}/messages`, payload);
 
+// Edit a message in a chat.
+// Payload should include `{ ciphertext, iv }`.
+export const editChatMessage = (friendId, messageId, payload) =>
+  api.patch(`/chats/${friendId}/messages/${messageId}`, payload);
+
+// Delete one message from your chat or from everyone.
+// Scope should be either `me` or `everyone`.
+export const deleteChatMessage = (friendId, messageId, scope = "me") =>
+  api.delete(`/chats/${friendId}/messages/${messageId}`, { params: { scope } });
+
+// Delete the full chat history with a friend for the current user.
+export const deleteFriendChat = (friendId) =>
+  api.delete(`/chats/${friendId}`);
+
 // Fetch the current user's encrypted key bundle.
 export const getCryptoProfile = () =>
   api.get("/crypto/profile");

@@ -56,6 +56,8 @@ class ChatMessageOut(BaseModel):
     ciphertext: str
     iv: str
     crypto_version: int
+    is_deleted_for_everyone: bool = False
+    edited_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -64,10 +66,18 @@ class ChatMessageOut(BaseModel):
 class ChatThreadOut(BaseModel):
     # Chat list item with last message info.
     friend: FriendOut
+    last_message_id: Optional[int] = None
     last_message_ciphertext: Optional[str] = None
     last_message_iv: Optional[str] = None
     last_message_version: Optional[int] = None
+    last_message_deleted_for_everyone: Optional[bool] = None
     last_time: Optional[datetime] = None
+
+
+class ChatMessageEdit(BaseModel):
+    # Payload for editing a previously sent message.
+    ciphertext: str
+    iv: str
 
 
 class CryptoProfileIn(BaseModel):

@@ -64,6 +64,13 @@ class chatting(Base):
     iv = Column(String, nullable=False)
     # Version to allow future algorithm upgrades.
     crypto_version = Column(Integer, nullable=False, server_default=text("1"))
+    # True when sender deletes the message for both participants.
+    is_deleted_for_everyone = Column(Boolean, nullable=False, server_default=text("false"))
+    # Per-user soft delete flags for "delete for me" behavior.
+    deleted_for_sender = Column(Boolean, nullable=False, server_default=text("false"))
+    deleted_for_receiver = Column(Boolean, nullable=False, server_default=text("false"))
+    # Set when sender edits encrypted content.
+    edited_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
 
 
