@@ -11,6 +11,7 @@ Secure full-stack chat application built with React and FastAPI, featuring accou
 - [API Reference](#api-reference)
 - [Frontend Routes](#frontend-routes)
 - [Environment Configuration](#environment-configuration)
+- [Database Setup and Structure](#database-setup-and-structure)
 - [Local Development Setup](#local-development-setup)
 - [Project Structure](#project-structure)
 - [Known Constraints](#known-constraints)
@@ -185,6 +186,64 @@ Frontend API defaults:
 
 - HTTP API base URL: `http://127.0.0.1:8000` (see `frontend/src/api/axios.js`)
 - WebSocket base URL: `ws://127.0.0.1:8000` (override with `REACT_APP_WS_BASE_URL`)
+
+## Database Setup and Structure
+
+### PostgreSQL Setup (Local)
+
+Create a database user and database (replace values as needed):
+
+```sql
+CREATE USER chatapp WITH PASSWORD 'yourpassword';
+CREATE DATABASE chatapp OWNER chatapp;
+GRANT ALL PRIVILEGES ON DATABASE chatapp TO chatapp;
+```
+
+Set matching values in `backend/.env`:
+
+```ini
+database_hostname=localhost
+database_port=5432
+database_name=chatapp
+database_username=chatapp
+database_password=yourpassword
+```
+
+Start the backend once to auto-create tables:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+### Schema Structure
+
+The backend uses SQLAlchemy models and creates these tables:
+
+| Table | Purpose | Primary Key | Key Relationships |
+| --- | --- | --- | --- |
+| `users` | User account and crypto profile data | `id` | Referenced by `verified_users.owner_id`, `password_resets.owner_id`, `friends.owner_id`, `friends.friend_id`, `chatting.sender_id`, `chatting.receiver_id` |
+| `verified_users` | Email verification state/code per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
+| `password_resets` | Password reset code lifecycle per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
+| `friends` | User-to-user contact mapping | `id` | `owner_id -> users.id`, `friend_id -> users.id`, unique pair on (`owner_id`, `friend_id`) |
+| `chatting` | Encrypted message storage | `id` | `sender_id -> users.id`, `receiver_id -> users.id` |
+
+### Chat Table Fields
+
+`chatting` contains encryption and message-lifecycle fields:
+
+- `ciphertext`, `iv`: encrypted payload
+- `crypto_version`: crypto format/version marker
+- `is_deleted_for_everyone`: delete-for-all state
+- `deleted_for_sender`, `deleted_for_receiver`: per-user soft delete flags
+- `edited_at`: timestamp when a message is edited
+- `created_at`: message creation timestamp
+
+### Migration Behavior
+
+- Development startup runs `Base.metadata.create_all(...)` to create missing tables.
+- Startup also runs defensive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for newer `chatting` columns to keep older local DBs compatible.
+- For production environments, move schema changes to Alembic migration scripts.
 
 ## Local Development Setup
 
