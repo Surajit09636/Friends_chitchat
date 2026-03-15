@@ -230,6 +230,7 @@ export default function Home() {
       if (payload.type === "friend_request_received") {
         const request = payload.request;
         if (!request?.id) return;
+        const senderUsername = request.sender?.username || "someone";
         setIncomingRequests((prev) => {
           const withoutExisting = prev.filter((item) => item.id !== request.id);
           return [request, ...withoutExisting].sort(
@@ -238,6 +239,10 @@ export default function Home() {
               new Date(a.created_at || 0).getTime()
           );
         });
+        addNotification(
+          `@${senderUsername} sent you a friend request.`,
+          "request"
+        );
         updateFriendResultStatus(request.sender?.id, "incoming_request");
         return;
       }
@@ -393,16 +398,6 @@ export default function Home() {
       }
 
       const messageWithText = { ...message, text };
-
-      if (message.sender_id !== user?.id) {
-        const friendUsername = thread?.friend?.username || "unknown";
-        const preview = message.is_deleted_for_everyone
-          ? "This message was deleted"
-          : text || "New message";
-        const clippedPreview =
-          preview.length > 72 ? `${preview.slice(0, 72)}...` : preview;
-        addNotification(`@${friendUsername}: ${clippedPreview}`, "message");
-      }
 
       // Append to the active thread if it matches.
       setMessages((prev) =>

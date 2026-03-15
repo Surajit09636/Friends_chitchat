@@ -1,3 +1,5 @@
 myapi
 .env
+.env.prod
+.env.dev
 __pycache__/

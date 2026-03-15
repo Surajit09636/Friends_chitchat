@@ -1,13 +1,11 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .env_loader import ENVIRONMENT
 
 
 class Settings(BaseSettings):
-    # Database connection settings.
-    database_hostname: str
-    database_port: str
-    database_password: str
-    database_name: str
-    database_username: str
+    environment: str = ENVIRONMENT
+    database_url: str | None = None
     # JWT signing configuration.
     secret_key: str
     algorithm: str
@@ -20,9 +18,7 @@ class Settings(BaseSettings):
     smtp_from_email: str
     smtp_use_tls: bool = True
 
-    class Config:
-        # Load environment variables from the backend .env file.
-        env_file = ".env"
+    model_config = SettingsConfigDict(extra="ignore")
 
 
 # Singleton settings instance used across the app.

@@ -1,0 +1,12 @@
+# Environment files
+.env
+.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+
+# Keep template examples if you add them
+!.env.example
+!backend/.env.example
+!frontend/.env.example
