@@ -1,9 +1,13 @@
 // Axios instance used for all API requests.
 import axios from "axios";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000";
+
 // Configure the API base URL once.
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: API_BASE_URL,
+  timeout: 5000, // Optional timeout for requests
 });
 
 // Attach the auth token to every outgoing request if available.
