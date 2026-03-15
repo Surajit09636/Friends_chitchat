@@ -6,7 +6,15 @@ from .E2EE import crypto
 
 from .database_configure import models
 from .database_configure.database import engine
-from .routers import auth, chat, forgotpassword, messages_ws, user, verification
+from .routers import (
+    auth,
+    chat,
+    forgotpassword,
+    friend_request,
+    messages_ws,
+    user,
+    verification,
+)
 
 # Create DB tables on startup (use Alembic for production migrations).
 models.Base.metadata.create_all(bind=engine)
@@ -49,6 +57,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(chat.router)
+app.include_router(friend_request.router)
 app.include_router(crypto.router)
 app.include_router(verification.router)
 app.include_router(forgotpassword.router)

@@ -37,6 +37,11 @@ class UserSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserSearchOut(UserSummary):
+    # Relationship state relative to the authenticated user.
+    relationship_status: str = "none"
+
+
 class FriendOut(UserSummary):
     # Lightweight friend info.
     pass
@@ -78,6 +83,24 @@ class ChatMessageEdit(BaseModel):
     # Payload for editing a previously sent message.
     ciphertext: str
     iv: str
+
+
+class FriendRequestOut(BaseModel):
+    # Friend request object with sender/receiver users.
+    id: int
+    sender: UserSummary
+    receiver: UserSummary
+    status: str
+    created_at: datetime
+    responded_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FriendRequestListOut(BaseModel):
+    # Pending friend requests for the authenticated user.
+    incoming: list[FriendRequestOut]
+    outgoing: list[FriendRequestOut]
 
 
 class CryptoProfileIn(BaseModel):

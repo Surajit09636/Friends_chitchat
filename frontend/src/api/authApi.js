@@ -17,9 +17,21 @@ export const getMe = () =>
 export const searchUsers = (query) =>
   api.get("/users/search", { params: { q: query } });
 
-// Add a friend by user id.
-export const addFriend = (friendId) =>
-  api.post(`/friends/${friendId}`);
+// Send a friend request by user id.
+export const sendFriendRequest = (friendId) =>
+  api.post(`/friend-requests/${friendId}`);
+
+// Fetch incoming/outgoing pending friend requests.
+export const getFriendRequests = () =>
+  api.get("/friend-requests");
+
+// Accept a pending friend request.
+export const acceptFriendRequest = (requestId) =>
+  api.post(`/friend-requests/${requestId}/accept`);
+
+// Decline a pending friend request.
+export const declineFriendRequest = (requestId) =>
+  api.post(`/friend-requests/${requestId}/decline`);
 
 // Fetch chat threads for the current user.
 export const getChatThreads = () =>
@@ -47,6 +59,10 @@ export const deleteChatMessage = (friendId, messageId, scope = "me") =>
 // Delete the full chat history with a friend for the current user.
 export const deleteFriendChat = (friendId) =>
   api.delete(`/chats/${friendId}`);
+
+// Remove a user from the friend list (both directions).
+export const removeFriend = (friendId) =>
+  api.delete(`/friends/${friendId}`);
 
 // Fetch the current user's encrypted key bundle.
 export const getCryptoProfile = () =>

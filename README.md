@@ -5,6 +5,7 @@ Secure full-stack chat application built with React and FastAPI, featuring accou
 ## Table of Contents
 
 - [Overview](#overview)
+- [Highlights](#highlights)
 - [Architecture](#architecture)
 - [Feature Set](#feature-set)
 - [Security Model](#security-model)
@@ -19,6 +20,14 @@ Secure full-stack chat application built with React and FastAPI, featuring accou
 ## Overview
 
 Friend's Chitchat is a chat system where message encryption and decryption happen in the browser. The backend stores encrypted payloads, manages authentication, user relationships, and email-based account flows.
+
+## Highlights
+
+- **[NEW] Friend request lifecycle is now explicit:** search users, send request, accept/decline in notifications, and chat only after acceptance.
+- **[NEW] Sender-side friend request confirmation is a smooth popup toast** instead of being added to the notification panel.
+- **[NEW] Receiver-side pending requests stay in the notification section** with `Accept` and `Decline` actions.
+- **[NEW] Right-click thread menu now supports `Remove friend`**, which removes the relationship for both users.
+- **[NEW] Friend-request logic is split into a dedicated backend router**: `backend/app/routers/friend_request.py`.
 
 ## Architecture
 
@@ -67,8 +76,12 @@ Friend's Chitchat is a chat system where message encryption and decryption happe
 ### Chat and Contacts
 
 - Search users by name, username, or email
-- Add users as friends to start chats
+- Send friend requests to users from search results
+- Accept or decline incoming friend requests from the notification section
+- Sender gets a popup toast when a request is sent
+- Chat is enabled only after a request is accepted
 - List all friends
+- Remove a friend from the right-click thread context menu
 - List chat threads with last-message metadata
 - Load full message history for a selected friend chat
 - Send encrypted messages (WebSocket primary path)
@@ -84,6 +97,7 @@ Friend's Chitchat is a chat system where message encryption and decryption happe
 - WebSocket authentication using JWT query token
 - Multi-connection fan-out per user
 - Live event stream includes new messages, edits, deletes, and conversation clears
+- Live friend events include request sent/received/accepted/declined and friend removal sync
 - Frontend socket state indicator (`connecting`, `connected`, `disconnected`, `error`)
 
 ### Frontend UX
@@ -92,7 +106,7 @@ Friend's Chitchat is a chat system where message encryption and decryption happe
 - Signup, login, email verification, and forgot-password flows
 - Secure chat unlock screen (password required to decrypt private key)
 - Searchable chat list and searchable user list
-- Context menu actions for message edit/delete and chat delete
+- Context menu actions for message edit/delete, chat delete, and friend removal
 - Light/dark theme toggle persisted in local storage
 - Toast/status messaging for auth and recovery flows
 
@@ -124,9 +138,14 @@ Friend's Chitchat is a chat system where message encryption and decryption happe
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/me` | Get current user profile |
-| `GET` | `/users/search?q=...` | Search users (min query length 2) |
-| `POST` | `/friends/{friend_id}` | Add friend |
+| `GET` | `/users/search?q=...` | Search users (min query length 2, includes relationship status) |
+| `POST` | `/friend-requests/{receiver_id}` | Send friend request |
+| `GET` | `/friend-requests` | List pending incoming/outgoing friend requests |
+| `POST` | `/friend-requests/{request_id}/accept` | Accept pending friend request |
+| `POST` | `/friend-requests/{request_id}/decline` | Decline pending friend request |
+| `POST` | `/friends/{friend_id}` | Backward-compatible alias to send friend request |
 | `GET` | `/friends` | List friends |
+| `DELETE` | `/friends/{friend_id}` | Remove friend (both directions) |
 | `GET` | `/chats` | List chat threads with last message metadata |
 | `GET` | `/chats/{friend_id}/messages` | List visible messages for chat |
 | `POST` | `/chats/{friend_id}/messages` | Send encrypted message (HTTP fallback) |
@@ -222,10 +241,11 @@ The backend uses SQLAlchemy models and creates these tables:
 
 | Table | Purpose | Primary Key | Key Relationships |
 | --- | --- | --- | --- |
-| `users` | User account and crypto profile data | `id` | Referenced by `verified_users.owner_id`, `password_resets.owner_id`, `friends.owner_id`, `friends.friend_id`, `chatting.sender_id`, `chatting.receiver_id` |
+| `users` | User account and crypto profile data | `id` | Referenced by `verified_users.owner_id`, `password_resets.owner_id`, `friends.owner_id`, `friends.friend_id`, `friend_requests.sender_id`, `friend_requests.receiver_id`, `chatting.sender_id`, `chatting.receiver_id` |
 | `verified_users` | Email verification state/code per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
 | `password_resets` | Password reset code lifecycle per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
 | `friends` | User-to-user contact mapping | `id` | `owner_id -> users.id`, `friend_id -> users.id`, unique pair on (`owner_id`, `friend_id`) |
+| `friend_requests` | Friend request lifecycle state | `id` | `sender_id -> users.id`, `receiver_id -> users.id`, unique pair on (`sender_id`, `receiver_id`) |
 | `chatting` | Encrypted message storage | `id` | `sender_id -> users.id`, `receiver_id -> users.id` |
 
 ### Chat Table Fields
@@ -286,7 +306,7 @@ backend/
     configaration/         # Environment settings
     database_configure/    # SQLAlchemy engine + models
     E2EE/                  # Crypto profile API
-    routers/               # Auth, users, chat, verification, reset, websocket
+    routers/               # Auth, users, chat, friend requests, verification, reset, websocket
     schema/                # Pydantic schemas
     Websocket_configure/   # Connection manager runtime
   requirements.txt

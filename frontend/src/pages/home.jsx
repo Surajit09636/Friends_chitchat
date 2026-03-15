@@ -2,13 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
-  addFriend,
+  acceptFriendRequest,
   deleteChatMessage,
   deleteFriendChat,
+  declineFriendRequest,
   editChatMessage,
+  getFriendRequests,
   getChatMessages,
   getChatThreads,
+  removeFriend,
   searchUsers,
+  sendFriendRequest,
 } from "../api/authApi";
 import { createMessageSocket } from "../api/ws";
 import { useCrypto } from "../crypto/CryptoContext";
@@ -78,12 +82,16 @@ export default function Home() {
   const [threadMenu, setThreadMenu] = useState(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequestUserIds, setOutgoingRequestUserIds] = useState([]);
+  const [requestToast, setRequestToast] = useState(null);
 
   // Refs keep the WebSocket handlers in sync with latest state.
   const socketRef = useRef(null);
   const threadsRef = useRef([]);
   const activeIdRef = useRef(null);
   const fetchThreadsRef = useRef(async () => {});
+  const fetchFriendRequestsRef = useRef(async () => {});
 
   const activeThread = threads.find(
     (thread) => thread.friend?.id === activeId
@@ -91,6 +99,8 @@ export default function Home() {
   const activeMessages = messages ?? [];
   const displayName =
     user?.username || formatDisplayName(user?.identifier) || "";
+  const notificationCount = notifications.length + incomingRequests.length;
+
   const addNotification = useCallback((text, type = "info") => {
     const message = text?.trim();
     if (!message) return;
@@ -112,6 +122,38 @@ export default function Home() {
   }, []);
   const clearNotifications = useCallback(() => {
     setNotifications([]);
+  }, []);
+  const showRequestToast = useCallback((text) => {
+    const message = text?.trim();
+    if (!message) return;
+    setRequestToast({ id: createNotificationId(), text: message });
+  }, []);
+  const updateFriendResultStatus = useCallback((targetUserId, status) => {
+    if (!targetUserId) return;
+    setFriendResults((prev) =>
+      prev.map((item) =>
+        item.id === targetUserId
+          ? { ...item, relationship_status: status }
+          : item
+      )
+    );
+  }, []);
+  const fetchFriendRequests = useCallback(async () => {
+    try {
+      const res = await getFriendRequests();
+      const incoming = res.data?.incoming ?? [];
+      const outgoing = res.data?.outgoing ?? [];
+      setIncomingRequests(incoming);
+      setOutgoingRequestUserIds(
+        [...new Set(
+          outgoing
+            .map((request) => request.receiver?.id)
+            .filter((id) => Number.isInteger(id))
+        )]
+      );
+    } catch (err) {
+      // Ignore request sync errors; chat should remain usable.
+    }
   }, []);
   const filteredThreads = threads.filter((thread) => {
     if (!chatQuery.trim()) return true;
@@ -168,12 +210,138 @@ export default function Home() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!requestToast) return undefined;
+    const timer = setTimeout(() => {
+      setRequestToast(null);
+    }, 2300);
+    return () => clearTimeout(timer);
+  }, [requestToast]);
+
   const handleIncomingMessage = useCallback(
     async (payload) => {
       if (payload.type === "error") {
         const detail = payload.detail || "Message error";
         setChatError(detail);
         addNotification(detail, "error");
+        return;
+      }
+
+      if (payload.type === "friend_request_received") {
+        const request = payload.request;
+        if (!request?.id) return;
+        setIncomingRequests((prev) => {
+          const withoutExisting = prev.filter((item) => item.id !== request.id);
+          return [request, ...withoutExisting].sort(
+            (a, b) =>
+              new Date(b.created_at || 0).getTime() -
+              new Date(a.created_at || 0).getTime()
+          );
+        });
+        updateFriendResultStatus(request.sender?.id, "incoming_request");
+        return;
+      }
+
+      if (payload.type === "friend_request_sent") {
+        const request = payload.request;
+        const receiverId = request?.receiver?.id;
+        if (receiverId) {
+          setOutgoingRequestUserIds((prev) =>
+            prev.includes(receiverId) ? prev : [...prev, receiverId]
+          );
+          updateFriendResultStatus(receiverId, "outgoing_request");
+        }
+        return;
+      }
+
+      if (payload.type === "friend_request_accepted_sender") {
+        const request = payload.request;
+        const acceptedByUsername = request?.receiver?.username || "friend";
+        addNotification(
+          `@${acceptedByUsername} accepted your friend request.`
+        );
+
+        const senderId = request?.sender?.id;
+        const receiverId = request?.receiver?.id;
+        const otherUserId = senderId === user?.id ? receiverId : senderId;
+        if (otherUserId) {
+          setOutgoingRequestUserIds((prev) =>
+            prev.filter((id) => id !== otherUserId)
+          );
+          setIncomingRequests((prev) =>
+            prev.filter((item) => item.sender?.id !== otherUserId)
+          );
+          updateFriendResultStatus(otherUserId, "friend");
+        }
+        await fetchFriendRequestsRef.current();
+        await fetchThreadsRef.current(activeIdRef.current);
+        return;
+      }
+
+      if (payload.type === "friend_request_accepted") {
+        const request = payload.request;
+        const senderId = request?.sender?.id;
+        const receiverId = request?.receiver?.id;
+        const otherUserId = senderId === user?.id ? receiverId : senderId;
+        if (otherUserId) {
+          setOutgoingRequestUserIds((prev) =>
+            prev.filter((id) => id !== otherUserId)
+          );
+          setIncomingRequests((prev) =>
+            prev.filter((item) => item.sender?.id !== otherUserId)
+          );
+          updateFriendResultStatus(otherUserId, "friend");
+        }
+        await fetchFriendRequestsRef.current();
+        await fetchThreadsRef.current(activeIdRef.current);
+        return;
+      }
+
+      if (payload.type === "friend_request_declined") {
+        const request = payload.request;
+        const senderId = request?.sender?.id;
+        const receiverId = request?.receiver?.id;
+        const otherUserId = senderId === user?.id ? receiverId : senderId;
+        if (otherUserId) {
+          setOutgoingRequestUserIds((prev) =>
+            prev.filter((id) => id !== otherUserId)
+          );
+          setIncomingRequests((prev) =>
+            prev.filter((item) => item.sender?.id !== otherUserId)
+          );
+          updateFriendResultStatus(otherUserId, "none");
+        }
+        addNotification("Friend request declined.");
+        await fetchFriendRequestsRef.current();
+        return;
+      }
+
+      if (payload.type === "friend_removed") {
+        // The backend sends actor_id + friend_id; compute "the other user"
+        // from the perspective of the currently signed-in user.
+        const actorId = payload.actor_id;
+        const removedByActorId =
+          actorId === user?.id ? payload.friend_id : actorId;
+
+        if (removedByActorId) {
+          setOutgoingRequestUserIds((prev) =>
+            prev.filter((id) => id !== removedByActorId)
+          );
+          setIncomingRequests((prev) =>
+            prev.filter((item) => item.sender?.id !== removedByActorId)
+          );
+          updateFriendResultStatus(removedByActorId, "none");
+        }
+
+        if (actorId && actorId !== user?.id) {
+          // Notify only the receiver side to avoid duplicate self-toasts.
+          addNotification("A friend removed you from their contact list.");
+        }
+
+        const nextActiveId =
+          activeIdRef.current === removedByActorId ? null : activeIdRef.current;
+        await fetchThreadsRef.current(nextActiveId);
+        await fetchFriendRequestsRef.current();
         return;
       }
 
@@ -266,7 +434,7 @@ export default function Home() {
         });
       });
     },
-    [addNotification, decryptForFriend, user?.id]
+    [addNotification, decryptForFriend, updateFriendResultStatus, user?.id]
   );
 
   // Open a message socket after encryption keys are unlocked.
@@ -450,10 +618,18 @@ export default function Home() {
   }, [fetchThreads]);
 
   useEffect(() => {
+    fetchFriendRequestsRef.current = fetchFriendRequests;
+  }, [fetchFriendRequests]);
+
+  useEffect(() => {
     if (cryptoReady) {
       fetchThreads();
     }
   }, [cryptoReady, fetchThreads]);
+
+  useEffect(() => {
+    fetchFriendRequests();
+  }, [fetchFriendRequests]);
 
   useEffect(() => {
     if (!isNewChatOpen) {
@@ -518,6 +694,12 @@ export default function Home() {
     const existingThread = threads.find(
       (thread) => thread.friend?.id === friend.id
     );
+    const effectiveStatus = existingThread
+      ? "friend"
+      : outgoingRequestUserIds.includes(friend.id)
+      ? "outgoing_request"
+      : friend.relationship_status || "none";
+
     if (existingThread) {
       handleSelectThread(existingThread.friend.id);
       setIsNewChatOpen(false);
@@ -526,21 +708,79 @@ export default function Home() {
       return;
     }
 
-    const addAndOpen = async () => {
+    if (effectiveStatus === "friend") {
+      fetchThreads(friend.id);
+      return;
+    }
+
+    if (effectiveStatus === "incoming_request") {
+      addNotification("Accept this friend request from notifications.");
+      return;
+    }
+
+    if (effectiveStatus === "outgoing_request") {
+      addNotification("Friend request already sent.");
+      return;
+    }
+
+    const sendRequest = async () => {
       try {
         setFriendError("");
-        await addFriend(friend.id);
-        await fetchThreads(friend.id);
-        setIsNewChatOpen(false);
-        setFriendQuery("");
-        setChatQuery("");
+        await sendFriendRequest(friend.id);
+        setOutgoingRequestUserIds((prev) =>
+          prev.includes(friend.id) ? prev : [...prev, friend.id]
+        );
+        updateFriendResultStatus(friend.id, "outgoing_request");
+        showRequestToast("Friend request sent");
       } catch (err) {
         const detail = err.response?.data?.detail;
-        setFriendError(detail || "Could not add friend");
+        setFriendError(detail || "Could not send friend request");
       }
     };
 
-    addAndOpen();
+    sendRequest();
+  };
+
+  const handleAcceptRequest = async (request) => {
+    if (!request?.id) return;
+    try {
+      setIsActionPending(true);
+      await acceptFriendRequest(request.id);
+      setIncomingRequests((prev) =>
+        prev.filter((item) => item.id !== request.id)
+      );
+      setOutgoingRequestUserIds((prev) =>
+        prev.filter((id) => id !== request.sender?.id)
+      );
+      updateFriendResultStatus(request.sender?.id, "friend");
+      addNotification(`You can now chat with @${request.sender?.username}`);
+      await fetchThreads(request.sender?.id || activeIdRef.current);
+      await fetchFriendRequestsRef.current();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      addNotification(detail || "Could not accept friend request", "error");
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const handleDeclineRequest = async (request) => {
+    if (!request?.id) return;
+    try {
+      setIsActionPending(true);
+      await declineFriendRequest(request.id);
+      setIncomingRequests((prev) =>
+        prev.filter((item) => item.id !== request.id)
+      );
+      updateFriendResultStatus(request.sender?.id, "none");
+      addNotification(`Declined @${request.sender?.username}'s request`);
+      await fetchFriendRequestsRef.current();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      addNotification(detail || "Could not decline friend request", "error");
+    } finally {
+      setIsActionPending(false);
+    }
   };
 
   const handleMessageContextMenu = (event, message) => {
@@ -647,6 +887,30 @@ export default function Home() {
     }
   };
 
+  const handleRemoveFriend = async (thread) => {
+    if (!thread?.friend?.id) return;
+
+    try {
+      setIsActionPending(true);
+      setChatError("");
+      // Removing a friend revokes chat access until a new request is accepted.
+      await removeFriend(thread.friend.id);
+      setThreadMenu(null);
+      handleCancelEditMessage();
+      updateFriendResultStatus(thread.friend.id, "none");
+      showRequestToast("Friend removed");
+      await fetchFriendRequestsRef.current();
+      await fetchThreadsRef.current(
+        activeIdRef.current === thread.friend.id ? null : activeIdRef.current
+      );
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setChatError(detail || "Could not remove friend");
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
   const handleSend = (event) => {
     event.preventDefault();
     const trimmed = draft.trim();
@@ -693,6 +957,16 @@ export default function Home() {
 
   return (
     <div className="chat-page" data-theme={theme}>
+      {requestToast && (
+        <div
+          key={requestToast.id}
+          className="chat-toast"
+          role="status"
+          aria-live="polite"
+        >
+          {requestToast.text}
+        </div>
+      )}
       {!cryptoReady && (
         <div className="chat-lock" role="dialog" aria-live="polite">
           <div className="chat-lock__card">
@@ -737,7 +1011,7 @@ export default function Home() {
             <button
               type="button"
               className="chat-notification-toggle"
-              aria-label={`Notifications (${notifications.length})`}
+              aria-label={`Notifications (${notificationCount})`}
             >
               <svg
                 viewBox="0 0 24 24"
@@ -751,9 +1025,9 @@ export default function Home() {
                 <path d="M15 18h5l-1.4-1.4A2 2 0 0 1 18 15.2V11a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 18h5" />
                 <path d="M9 18a3 3 0 0 0 6 0" />
               </svg>
-              {notifications.length > 0 && (
+              {notificationCount > 0 && (
                 <span className="chat-notification-toggle__badge">
-                  {notifications.length > 99 ? "99+" : notifications.length}
+                  {notificationCount > 99 ? "99+" : notificationCount}
                 </span>
               )}
             </button>
@@ -769,32 +1043,64 @@ export default function Home() {
                   onClick={clearNotifications}
                   disabled={notifications.length === 0}
                 >
-                  Clear all
+                  Clear alerts
                 </button>
               </div>
               <div className="chat-notifications__list">
-                {notifications.length === 0 ? (
+                {incomingRequests.length === 0 && notifications.length === 0 ? (
                   <p className="chat-notifications__empty">
                     Notifications will appear here.
                   </p>
                 ) : (
-                  notifications.map((notification) => (
-                    <article
-                      key={notification.id}
-                      className={`chat-notification chat-notification--${notification.type}`}
-                    >
-                      <p className="chat-notification__text">{notification.text}</p>
-                      <div className="chat-notification__meta">
-                        <span>{formatTimestamp(notification.created_at)}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeNotification(notification.id)}
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    </article>
-                  ))
+                  <>
+                    {incomingRequests.map((request) => (
+                      <article
+                        key={`request-${request.id}`}
+                        className="chat-notification chat-notification--request"
+                      >
+                        <p className="chat-notification__text">
+                          <strong>@{request.sender?.username}</strong> sent you a friend request.
+                        </p>
+                        <div className="chat-notification__meta">
+                          <span>{formatTimestamp(request.created_at)}</span>
+                        </div>
+                        <div className="chat-notification__actions">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptRequest(request)}
+                            disabled={isActionPending}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            className="is-danger"
+                            onClick={() => handleDeclineRequest(request)}
+                            disabled={isActionPending}
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                    {notifications.map((notification) => (
+                      <article
+                        key={notification.id}
+                        className={`chat-notification chat-notification--${notification.type}`}
+                      >
+                        <p className="chat-notification__text">{notification.text}</p>
+                        <div className="chat-notification__meta">
+                          <span>{formatTimestamp(notification.created_at)}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeNotification(notification.id)}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </>
                 )}
               </div>
             </div>
@@ -859,10 +1165,27 @@ export default function Home() {
                     const exists = threads.some(
                       (thread) => thread.friend?.id === friend.id
                     );
+                    const relationshipStatus = exists
+                      ? "friend"
+                      : incomingRequests.some(
+                          (request) => request.sender?.id === friend.id
+                        )
+                      ? "incoming_request"
+                      : outgoingRequestUserIds.includes(friend.id)
+                      ? "outgoing_request"
+                      : friend.relationship_status || "none";
                     const label = friend.name?.trim() || friend.username;
                     const meta = friend.email
                       ? `@${friend.username} | ${friend.email}`
                       : `@${friend.username}`;
+                    const actionLabel =
+                      relationshipStatus === "friend"
+                        ? "Open"
+                        : relationshipStatus === "incoming_request"
+                        ? "Pending your action"
+                        : relationshipStatus === "outgoing_request"
+                        ? "Requested"
+                        : "Send request";
                     return (
                       <button
                         key={friend.id}
@@ -877,9 +1200,7 @@ export default function Home() {
                           <span className="chat-friend__name">{label}</span>
                           <span className="chat-friend__status">{meta}</span>
                         </div>
-                        <span className="chat-friend__action">
-                          {exists ? "Open" : "Add"}
-                        </span>
+                        <span className="chat-friend__action">{actionLabel}</span>
                       </button>
                     );
                   })
@@ -903,17 +1224,13 @@ export default function Home() {
               <p className="chat-empty-state">Loading chats...</p>
             ) : threads.length === 0 && !chatQuery.trim() ? (
               <p className="chat-empty-state">
-                No chats yet. Add friends to start.
+                No chats yet. Send friend requests to start.
               </p>
             ) : filteredThreads.length === 0 ? (
               <p className="chat-empty-state">No chats match that search.</p>
             ) : (
               filteredThreads.map((thread) => {
-                const label =
-                  thread.friend?.name?.trim() || thread.friend?.username || "";
-                const status = thread.friend?.username
-                  ? `@${thread.friend.username}`
-                  : "Friend";
+                const username = thread.friend?.username || "Friend";
                 const preview =
                   thread.last_preview || "Start the conversation";
                 const lastTime = thread.last_time
@@ -932,15 +1249,14 @@ export default function Home() {
                     }
                   >
                     <div className="chat-thread__avatar">
-                      {getInitials(label)}
+                      {getInitials(thread.friend?.username || "Friend")}
                     </div>
                     <div className="chat-thread__body">
                       <div className="chat-thread__top">
-                        <span className="chat-thread__name">{label}</span>
+                        <span className="chat-thread__name">{username}</span>
                         <span className="chat-thread__time">{lastTime}</span>
                       </div>
                       <p className="chat-thread__preview">{preview}</p>
-                      <span className="chat-thread__status">{status}</span>
                     </div>
                   </button>
                 );
@@ -1101,13 +1417,13 @@ export default function Home() {
               ) : (
                 <>
                   <h2>No chats yet</h2>
-                  <p>Add friends to start chatting.</p>
+                  <p>Send friend requests to start chatting.</p>
                   <button
                     type="button"
                     className="chat-chip"
                     onClick={() => setIsNewChatOpen(true)}
                   >
-                    Add friends
+                    Find friends
                   </button>
                 </>
               )}
@@ -1161,6 +1477,14 @@ export default function Home() {
           style={{ left: threadMenu.x, top: threadMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
+          <button
+            type="button"
+            className="is-danger"
+            onClick={() => handleRemoveFriend(threadMenu.thread)}
+            disabled={isActionPending}
+          >
+            Remove friend
+          </button>
           <button
             type="button"
             className="is-danger"

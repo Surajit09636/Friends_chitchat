@@ -85,3 +85,22 @@ class Friend(Base):
     __table_args__ = (
         UniqueConstraint("owner_id", "friend_id", name="uq_friend_owner_friend"),
     )
+
+
+class FriendRequest(Base):
+    # ORM table for friend request workflow.
+    __tablename__ = "friend_requests"
+    id = Column(Integer, primary_key=True, nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Supported values: pending, accepted, declined.
+    status = Column(String, nullable=False, server_default=text("'pending'"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    responded_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
+
+    __table_args__ = (
+        UniqueConstraint("sender_id", "receiver_id", name="uq_friend_request_sender_receiver"),
+    )

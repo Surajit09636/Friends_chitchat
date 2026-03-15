@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..authentication import oauth2
 from ..database_configure import database, models
+from ..serialization import (
+    _serialize_chat_message,
+    _serialize_chat_thread,
+    _serialize_user_summary,
+)
 from ..schema import Schemas
 from ..Websocket_configure.runtime import manager
 
@@ -66,39 +71,83 @@ def _send_ws_event(user_ids: set[int], payload: dict) -> None:
         loop.create_task(manager.send_to_users(user_ids, payload))
 
 
-# The following endpoints implement friend management and encrypted chat messaging.
-@router.post("/friends/{friend_id}",response_model=Schemas.FriendOut,status_code=status.HTTP_201_CREATED,)
-def add_friend(friend_id: int,db: Session = Depends(database.get_db),current_user: models.User = Depends(oauth2.get_current_user),):
-    
-    if friend_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You cannot add yourself",
-        )
-
-    friend = db.query(models.User).filter(models.User.id == friend_id).first()
-    if not friend:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
-    existing = (db.query(models.Friend).filter(models.Friend.owner_id == current_user.id,models.Friend.friend_id == friend_id,).first())
-    if existing:
-        return friend
-
-    new_friend = models.Friend(owner_id=current_user.id, friend_id=friend_id)
-    db.add(new_friend)
-    db.commit()
-    return friend
-
-
+# Friend list + encrypted chat endpoints.
 @router.get("/friends", response_model=list[Schemas.FriendOut])
 def list_friends(db: Session = Depends(database.get_db),current_user: models.User = Depends(oauth2.get_current_user),):
     
     friends = (db.query(models.User).join(models.Friend, models.Friend.friend_id == models.User.id).filter(models.Friend.owner_id == current_user.id).order_by(models.User.username.asc()).all())
     
-    return friends
+    return [_serialize_user_summary(friend) for friend in friends]
+
+
+@router.delete("/friends/{friend_id}", response_model=Schemas.Message)
+def remove_friend(
+    friend_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if friend_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot remove yourself",
+        )
+
+    friend_user = db.query(models.User).filter(models.User.id == friend_id).first()
+    if not friend_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    _ensure_friendship(db, current_user.id, friend_id)
+
+    # Friendship is stored directionally; remove both edges to fully unfriend.
+    (
+        db.query(models.Friend)
+        .filter(
+            or_(
+                and_(
+                    models.Friend.owner_id == current_user.id,
+                    models.Friend.friend_id == friend_id,
+                ),
+                and_(
+                    models.Friend.owner_id == friend_id,
+                    models.Friend.friend_id == current_user.id,
+                ),
+            )
+        )
+        .delete(synchronize_session=False)
+    )
+
+    # Drop prior request records so users can send fresh requests later.
+    (
+        db.query(models.FriendRequest)
+        .filter(
+            or_(
+                and_(
+                    models.FriendRequest.sender_id == current_user.id,
+                    models.FriendRequest.receiver_id == friend_id,
+                ),
+                and_(
+                    models.FriendRequest.sender_id == friend_id,
+                    models.FriendRequest.receiver_id == current_user.id,
+                ),
+            )
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+    # Realtime sync for both users so UIs can refresh lists immediately.
+    _send_ws_event(
+        {current_user.id, friend_id},
+        {
+            "type": "friend_removed",
+            "actor_id": current_user.id,
+            "friend_id": friend_id,
+        },
+    )
+    return {"message": "Friend removed"}
 
 
 @router.get("/chats", response_model=list[Schemas.ChatThreadOut])
@@ -140,29 +189,19 @@ def list_chats(db: Session = Depends(database.get_db),current_user: models.User 
         if other_id not in last_by_friend:
             last_by_friend[other_id] = message
 
-    threads: list[Schemas.ChatThreadOut] = []
-    for friend in friends:
-        last = last_by_friend.get(friend.id)
-        threads.append(
-            Schemas.ChatThreadOut(
-                friend=friend,
-                last_message_id=last.id if last else None,
-                last_message_ciphertext=last.ciphertext if last else None,
-                last_message_iv=last.iv if last else None,
-                last_message_version=last.crypto_version if last else None,
-                last_message_deleted_for_everyone=(
-                    last.is_deleted_for_everyone if last else None
-                ),
-                last_time=last.created_at if last else None,
-            )
-        )
-
-    threads.sort(
-        key=lambda thread: thread.last_time
-        or datetime.min.replace(tzinfo=timezone.utc),
+    sorted_friends = sorted(
+        friends,
+        key=lambda friend: (
+            last_by_friend[friend.id].created_at
+            if friend.id in last_by_friend
+            else datetime.min.replace(tzinfo=timezone.utc)
+        ),
         reverse=True,
     )
-    return threads
+    return [
+        _serialize_chat_thread(friend, last_by_friend.get(friend.id))
+        for friend in sorted_friends
+    ]
 
 
 @router.get("/chats/{friend_id}/messages", response_model=list[Schemas.ChatMessageOut])
@@ -182,7 +221,7 @@ def list_messages(
         .order_by(models.chatting.created_at.asc())
         .all()
     )
-    return messages
+    return [_serialize_chat_message(message) for message in messages]
 
 
 @router.post(
@@ -225,20 +264,10 @@ def send_message(
 
     message_payload = {
         "type": "message",
-        "message": {
-            "id": new_message.id,
-            "sender_id": new_message.sender_id,
-            "receiver_id": new_message.receiver_id,
-            "ciphertext": new_message.ciphertext,
-            "iv": new_message.iv,
-            "crypto_version": new_message.crypto_version,
-            "is_deleted_for_everyone": new_message.is_deleted_for_everyone,
-            "edited_at": None,
-            "created_at": new_message.created_at.isoformat(),
-        },
+        "message": _serialize_chat_message(new_message),
     }
     _send_ws_event({current_user.id, friend_id}, message_payload)
-    return new_message
+    return _serialize_chat_message(new_message)
 
 
 @router.patch(
@@ -299,22 +328,10 @@ def edit_message(
         {
             "type": "message_edited",
             "friend_id": friend_id,
-            "message": {
-                "id": message.id,
-                "sender_id": message.sender_id,
-                "receiver_id": message.receiver_id,
-                "ciphertext": message.ciphertext,
-                "iv": message.iv,
-                "crypto_version": message.crypto_version,
-                "is_deleted_for_everyone": message.is_deleted_for_everyone,
-                "edited_at": message.edited_at.isoformat()
-                if message.edited_at
-                else None,
-                "created_at": message.created_at.isoformat(),
-            },
+            "message": _serialize_chat_message(message),
         },
     )
-    return message
+    return _serialize_chat_message(message)
 
 
 @router.delete("/chats/{friend_id}/messages/{message_id}", response_model=Schemas.Message)

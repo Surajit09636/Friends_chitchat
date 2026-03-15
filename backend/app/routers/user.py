@@ -7,6 +7,7 @@ from ..authentication import oauth2, utils
 
 from ..database_configure import database, models
 
+from ..serialization import _serialize_user_out
 from ..schema import Schemas
 
 # User-related endpoints.
@@ -59,10 +60,10 @@ def register(user: Schemas.UserCreate, db: Session = Depends(database.get_db)):
             detail="Email or username already registered",
         )
     db.refresh(new_user)
-    return new_user
+    return _serialize_user_out(new_user)
 
 # route for searching users by name, username or email
-@router.get("/users/search", response_model=list[Schemas.UserSummary])
+@router.get("/users/search", response_model=list[Schemas.UserSearchOut])
 def search_users(
     q: str = Query("", max_length=60),
     db: Session = Depends(database.get_db),
@@ -87,10 +88,63 @@ def search_users(
         .limit(20)
         .all()
     )
-    return users
+
+    friend_ids = {
+        item.friend_id
+        for item in (
+            db.query(models.Friend.friend_id)
+            .filter(models.Friend.owner_id == current_user.id)
+            .all()
+        )
+    }
+    outgoing_request_ids = {
+        item.receiver_id
+        for item in (
+            db.query(models.FriendRequest.receiver_id)
+            .filter(
+                models.FriendRequest.sender_id == current_user.id,
+                models.FriendRequest.status == "pending",
+            )
+            .all()
+        )
+    }
+    incoming_request_ids = {
+        item.sender_id
+        for item in (
+            db.query(models.FriendRequest.sender_id)
+            .filter(
+                models.FriendRequest.receiver_id == current_user.id,
+                models.FriendRequest.status == "pending",
+            )
+            .all()
+        )
+    }
+
+    # Build the response with the relationship status for each found user.
+    result: list[Schemas.UserSearchOut] = []
+    for found_user in users:
+        relationship_status = "none"
+        if found_user.id in friend_ids:
+            relationship_status = "friend"
+        elif found_user.id in outgoing_request_ids:
+            relationship_status = "outgoing_request"
+        elif found_user.id in incoming_request_ids:
+            relationship_status = "incoming_request"
+
+        result.append(
+            Schemas.UserSearchOut(
+                id=found_user.id,
+                username=found_user.username,
+                name=found_user.name,
+                email=found_user.email,
+                public_key=found_user.public_key,
+                relationship_status=relationship_status,
+            )
+        )
+    return result
 
 
 @router.get("/me", response_model=Schemas.UserOut)
 def get_me(current_user: models.User = Depends(oauth2.get_current_user)):
     # Return the authenticated user's profile.
-    return current_user
+    return _serialize_user_out(current_user)
