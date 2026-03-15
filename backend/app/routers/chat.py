@@ -12,6 +12,12 @@ from ..serialization import (
     _serialize_chat_message,
     _serialize_chat_thread,
     _serialize_user_summary,
+    _serialize_ws_conversation_cleared_event,
+    _serialize_ws_friend_removed_event,
+    _serialize_ws_message_deleted_for_everyone_event,
+    _serialize_ws_message_deleted_for_me_event,
+    _serialize_ws_message_edited_event,
+    _serialize_ws_message_event,
 )
 from ..schema import Schemas
 from ..Websocket_configure.runtime import manager
@@ -141,11 +147,7 @@ def remove_friend(
     # Realtime sync for both users so UIs can refresh lists immediately.
     _send_ws_event(
         {current_user.id, friend_id},
-        {
-            "type": "friend_removed",
-            "actor_id": current_user.id,
-            "friend_id": friend_id,
-        },
+        _serialize_ws_friend_removed_event(current_user.id, friend_id),
     )
     return {"message": "Friend removed"}
 
@@ -262,11 +264,7 @@ def send_message(
     db.commit()
     db.refresh(new_message)
 
-    message_payload = {
-        "type": "message",
-        "message": _serialize_chat_message(new_message),
-    }
-    _send_ws_event({current_user.id, friend_id}, message_payload)
+    _send_ws_event({current_user.id, friend_id}, _serialize_ws_message_event(new_message))
     return _serialize_chat_message(new_message)
 
 
@@ -325,11 +323,7 @@ def edit_message(
 
     _send_ws_event(
         {current_user.id, friend_id},
-        {
-            "type": "message_edited",
-            "friend_id": friend_id,
-            "message": _serialize_chat_message(message),
-        },
+        _serialize_ws_message_edited_event(friend_id, message),
     )
     return _serialize_chat_message(message)
 
@@ -375,11 +369,7 @@ def delete_message(
 
         _send_ws_event(
             {current_user.id, friend_id},
-            {
-                "type": "message_deleted_for_everyone",
-                "friend_id": friend_id,
-                "message_id": message.id,
-            },
+            _serialize_ws_message_deleted_for_everyone_event(friend_id, message.id),
         )
         return {"message": "Message deleted from everyone"}
 
@@ -395,11 +385,7 @@ def delete_message(
     db.commit()
     _send_ws_event(
         {current_user.id},
-        {
-            "type": "message_deleted_for_me",
-            "friend_id": friend_id,
-            "message_id": message.id,
-        },
+        _serialize_ws_message_deleted_for_me_event(friend_id, message.id),
     )
     return {"message": "Message deleted from your chat"}
 
@@ -433,6 +419,6 @@ def delete_friend_chat(
 
     _send_ws_event(
         {current_user.id},
-        {"type": "conversation_cleared", "friend_id": friend_id},
+        _serialize_ws_conversation_cleared_event(friend_id),
     )
     return {"message": "Chat deleted from your account"}

@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 
 from ..authentication import oauth2
 from ..database_configure import database, models
-from ..serialization import _serialize_friend_request
+from ..serialization import (
+    _serialize_friend_request,
+    _serialize_ws_friend_request_event,
+)
 from ..schema import Schemas
 from ..Websocket_configure.runtime import manager
 
@@ -132,11 +135,11 @@ def send_friend_request(
 
     _send_ws_event(
         {receiver.id},
-        {"type": "friend_request_received", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_received", friend_request),
     )
     _send_ws_event(
         {current_user.id},
-        {"type": "friend_request_sent", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_sent", friend_request),
     )
     return request_payload
 
@@ -162,14 +165,13 @@ def add_friend_alias(
         )
 
     friend_request = _create_or_reopen_request(db, current_user, receiver)
-    request_payload = _serialize_friend_request(friend_request)
     _send_ws_event(
         {receiver.id},
-        {"type": "friend_request_received", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_received", friend_request),
     )
     _send_ws_event(
         {current_user.id},
-        {"type": "friend_request_sent", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_sent", friend_request),
     )
     return {"message": "Friend request sent"}
 
@@ -257,16 +259,15 @@ def accept_friend_request(
     db.commit()
     db.refresh(friend_request)
 
-    request_payload = _serialize_friend_request(friend_request)
     # Notify receiver for state sync on their active sessions.
     _send_ws_event(
         {friend_request.receiver_id},
-        {"type": "friend_request_accepted", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_accepted", friend_request),
     )
     # Notify sender explicitly so they see acceptance confirmation.
     _send_ws_event(
         {friend_request.sender_id},
-        {"type": "friend_request_accepted_sender", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_accepted_sender", friend_request),
     )
     return {"message": "Friend request accepted"}
 
@@ -301,9 +302,8 @@ def decline_friend_request(
     db.commit()
     db.refresh(friend_request)
 
-    request_payload = _serialize_friend_request(friend_request)
     _send_ws_event(
         {friend_request.sender_id, friend_request.receiver_id},
-        {"type": "friend_request_declined", "request": request_payload},
+        _serialize_ws_friend_request_event("friend_request_declined", friend_request),
     )
     return {"message": "Friend request declined"}

@@ -67,3 +67,56 @@ def _serialize_chat_thread(friend: models.User, last_message: models.chatting | 
         ),
         "last_time": _serialize_datetime(last_message.created_at if last_message else None),
     }
+
+
+def _serialize_ws_friend_request_event(event_type: str, friend_request: models.FriendRequest) -> dict:
+    return {
+        "type": event_type,
+        "request": _serialize_friend_request(friend_request),
+    }
+
+
+def _serialize_ws_message_event(message: models.chatting) -> dict:
+    return {
+        "type": "message",
+        "message": _serialize_chat_message(message),
+    }
+
+
+def _serialize_ws_message_edited_event(friend_id: int, message: models.chatting) -> dict:
+    return {
+        "type": "message_edited",
+        "friend_id": friend_id,
+        "message": _serialize_chat_message(message),
+    }
+
+
+def _serialize_ws_friend_removed_event(actor_id: int, friend_id: int) -> dict:
+    return {
+        "type": "friend_removed",
+        "actor_id": actor_id,
+        "friend_id": friend_id,
+    }
+
+
+def _serialize_ws_message_deleted_for_everyone_event(friend_id: int, message_id: int) -> dict:
+    return {
+        "type": "message_deleted_for_everyone",
+        "friend_id": friend_id,
+        "message_id": message_id,
+    }
+
+
+def _serialize_ws_message_deleted_for_me_event(friend_id: int, message_id: int) -> dict:
+    return {
+        "type": "message_deleted_for_me",
+        "friend_id": friend_id,
+        "message_id": message_id,
+    }
+
+
+def _serialize_ws_conversation_cleared_event(friend_id: int) -> dict:
+    return {
+        "type": "conversation_cleared",
+        "friend_id": friend_id,
+    }

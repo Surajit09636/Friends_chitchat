@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..authentication import oauth2
 from ..database_configure import database, models
+from ..serialization import _serialize_ws_message_event
 from ..Websocket_configure.runtime import manager
 
 # WebSocket router for realtime message delivery.
@@ -95,22 +96,7 @@ async def messages_socket(websocket: WebSocket):
             db.refresh(new_message)
 
             # Fan-out the message to sender and receiver if connected.
-            message_payload = {
-                "type": "message",
-                "message": {
-                    "id": new_message.id,
-                    "sender_id": new_message.sender_id,
-                    "receiver_id": new_message.receiver_id,
-                    "ciphertext": new_message.ciphertext,
-                    "iv": new_message.iv,
-                    "crypto_version": new_message.crypto_version,
-                    "is_deleted_for_everyone": new_message.is_deleted_for_everyone,
-                    "edited_at": new_message.edited_at.isoformat()
-                    if new_message.edited_at
-                    else None,
-                    "created_at": new_message.created_at.isoformat(),
-                },
-            }
+            message_payload = _serialize_ws_message_event(new_message)
             await manager.send_to_users({current_user.id, friend_id}, message_payload)
     except WebSocketDisconnect:
         manager.disconnect(current_user.id, websocket)
