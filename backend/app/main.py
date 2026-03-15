@@ -42,7 +42,7 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://friendschitchat.vercel.app/",
+    "https://friends-chitchat.vercel.app/",
 ]
 
 # CORS middleware for frontend requests.
