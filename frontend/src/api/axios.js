@@ -1,8 +1,13 @@
 // Axios instance used for all API requests.
 import axios from "axios";
 
+const DEFAULT_API_BASE_URL =
+  process.env.NODE_ENV === "production"
+    ? "https://friends-chitchat-ypqb.onrender.com"
+    : "http://127.0.0.1:8000";
+
 const API_BASE_URL =
-  process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000";
+  process.env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL;
 
 // Configure the API base URL once.
 const api = axios.create({
