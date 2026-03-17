@@ -203,8 +203,15 @@ Notes:
 
 Frontend API defaults:
 
-- HTTP API base URL: `http://127.0.0.1:8000` (see `frontend/src/api/axios.js`)
+- HTTP API base URL: `http://127.0.0.1:8000` (override with `REACT_APP_API_BASE_URL`)
 - WebSocket base URL: `ws://127.0.0.1:8000` (override with `REACT_APP_WS_BASE_URL`)
+
+Create `frontend/.env` (or set variables in your hosting dashboard):
+
+```ini
+REACT_APP_API_BASE_URL=https://your-backend-domain.com
+REACT_APP_WS_BASE_URL=wss://your-backend-domain.com
+```
 
 ## Database Setup and Structure
 

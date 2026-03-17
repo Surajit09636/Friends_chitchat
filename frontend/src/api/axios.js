@@ -2,8 +2,17 @@
 import axios from "axios";
 
 // Configure the API base URL once.
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = (
+  process.env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL
+).replace(/\/+$/, "");
+
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: API_BASE_URL,
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
 });
 
 // Attach the auth token to every outgoing request if available.

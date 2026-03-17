@@ -1,6 +1,8 @@
 // Auth-related API wrappers.
 import api from "./axios";
 
+const toEmailPayload = (email) => ({ email: String(email || "").trim() });
+
 // Log in with identifier and password.
 export const loginUser = (data) =>
   api.post("/login", data);
@@ -74,16 +76,23 @@ export const saveCryptoProfile = (payload) =>
 
 // Request an email verification code.
 export const requestEmailVerification = (email) =>
-  api.post("/verification/request", { email });
+  api.post("/verification/request", toEmailPayload(email));
 
 // Confirm the email verification code.
 export const confirmEmailVerification = (email, code) =>
-  api.post("/verification/confirm", { email, code });
+  api.post("/verification/confirm", {
+    ...toEmailPayload(email),
+    code: String(code || "").trim(),
+  });
 
 // Request a password reset code.
 export const requestPasswordReset = (email) =>
-  api.post("/password/forgot", { email });
+  api.post("/password/forgot", toEmailPayload(email));
 
 // Confirm a password reset with code + new password.
 export const confirmPasswordReset = (email, code, new_password) =>
-  api.post("/password/reset", { email, code, new_password });
+  api.post("/password/reset", {
+    ...toEmailPayload(email),
+    code: String(code || "").trim(),
+    new_password,
+  });

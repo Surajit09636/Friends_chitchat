@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 import random
 import smtplib
 from email.message import EmailMessage
@@ -14,6 +15,7 @@ from ..configaration.config import settings
 
 # Verification-related endpoints.
 router = APIRouter(tags=["Verification"])
+logger = logging.getLogger(__name__)
 
 VERIFICATION_CODE_EXPIRE_MINUTES = 10
 
@@ -102,6 +104,11 @@ def request_verification(
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception(
+            "Could not send verification email to %s via SMTP host %s",
+            user.email,
+            settings.smtp_host,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not send verification email",

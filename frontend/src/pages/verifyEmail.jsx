@@ -16,7 +16,8 @@ export default function VerifyEmail() {
   const [code, setCode] = useState("");
   const [info, setInfo] = useState(
     location.state?.sendFailed
-      ? "We could not send a verification code. Please resend."
+      ? location.state?.sendFailedReason ||
+        "We could not send a verification code. Please resend."
       : initialEmail
       ? `We sent a verification code to ${initialEmail}.`
       : ""
@@ -24,6 +25,8 @@ export default function VerifyEmail() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const getApiError = (err, fallback) =>
+    err?.response?.data?.detail || fallback;
 
   const handleResend = async () => {
     if (!email) {
@@ -40,7 +43,7 @@ export default function VerifyEmail() {
 
       setInfo(`We sent a verification code to ${email}.`);
     } catch (err) {
-      setError("Could not send verification code");
+      setError(getApiError(err, "Could not send verification code"));
     } finally {
       setSending(false);
     }
@@ -62,7 +65,7 @@ export default function VerifyEmail() {
 
       navigate("/login", { state: { emailVerified: true } });
     } catch (err) {
-      setError("Invalid or expired verification code");
+      setError(getApiError(err, "Invalid or expired verification code"));
     } finally {
       setVerifying(false);
     }

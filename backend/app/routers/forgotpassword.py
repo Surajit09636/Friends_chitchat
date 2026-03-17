@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 import random
 import smtplib
 from email.message import EmailMessage
@@ -13,6 +14,7 @@ from ..schema import Schemas
 
 # Password reset-related endpoints.
 router = APIRouter(tags=["Password"])
+logger = logging.getLogger(__name__)
 
 PASSWORD_RESET_EXPIRE_MINUTES = 15
 
@@ -74,6 +76,11 @@ def request_password_reset(payload: Schemas.PasswordResetRequest,db: Session = D
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception(
+            "Could not send password reset email to %s via SMTP host %s",
+            user.email,
+            settings.smtp_host,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not send reset email",

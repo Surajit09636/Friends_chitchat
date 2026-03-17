@@ -35,13 +35,18 @@ export default function Signup() {
       await registerUser({ name, username, email, password });
 
       let sendFailed = false;
+      let sendFailedReason = "";
       try {
         await requestEmailVerification(email);
       } catch (err) {
         sendFailed = true;
+        sendFailedReason =
+          err?.response?.data?.detail || "Could not send verification code";
       }
 
-      navigate("/verify-email", { state: { email, sendFailed } });
+      navigate("/verify-email", {
+        state: { email, sendFailed, sendFailedReason },
+      });
     } catch (err) {
       const statusCode = err.response?.status;
       const detail = err.response?.data?.detail;
