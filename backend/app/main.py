@@ -39,11 +39,7 @@ ensure_chatting_columns()
 app = FastAPI()
 
 # Allow the React dev server to call the API.
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://friends-chitchat.vercel.app/",
-]
+origins = ["*"]
 
 # CORS middleware for frontend requests.
 app.add_middleware(
