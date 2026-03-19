@@ -1,0 +1,9 @@
+{
+  "algorithm": "bpe",
+  "input_file": "D:\\Coding\\Chatapp\\backend\\Max\\data\\raw\\tinystories.txt",
+  "model_file": "D:\\Coding\\Chatapp\\backend\\Max\\output\\tokenizer_bpe.model",
+  "vocab_file": "D:\\Coding\\Chatapp\\backend\\Max\\output\\tokenizer_bpe.vocab",
+  "vocab_size": 8000,
+  "character_coverage": 1.0,
+  "input_sentence_size": 1000000
+}

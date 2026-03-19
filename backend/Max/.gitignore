@@ -1,0 +1,13 @@
+.venv/
+max
+__pycache__/
+*.pyc
+
+data/raw/*.txt
+data/tokenized/*.bin
+artifacts/*
+!artifacts/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+outputs/*
+!outputs/.gitkeep
