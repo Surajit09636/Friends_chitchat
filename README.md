@@ -1,334 +1,327 @@
 # Friend's Chitchat
 
-Secure full-stack chat application built with React and FastAPI, featuring account verification, password recovery, JWT auth, realtime messaging, and browser-side end-to-end encryption (E2EE).
+Friend's Chitchat is a full-stack encrypted chat application built with React and FastAPI.
+
+It includes email-verified authentication, JWT-protected APIs, realtime WebSocket messaging, friend request workflows, per-message lifecycle controls (edit/delete), and browser-side end-to-end encryption (E2EE) using the Web Crypto API. The backend stores only encrypted chat payloads and encrypted private-key bundles.
+
+This repository also contains an in-progress `backend/Max` workspace for small GPT training experiments.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Highlights](#highlights)
-- [Architecture](#architecture)
-- [Feature Set](#feature-set)
-- [Security Model](#security-model)
-- [API Reference](#api-reference)
-- [Frontend Routes](#frontend-routes)
-- [Environment Configuration](#environment-configuration)
-- [Database Setup and Structure](#database-setup-and-structure)
-- [Local Development Setup](#local-development-setup)
-- [Project Structure](#project-structure)
-- [Known Constraints](#known-constraints)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Installation and Setup](#installation-and-setup)
+- [API Endpoints](#api-endpoints)
+- [Usage Instructions](#usage-instructions)
+- [Folder Structure](#folder-structure)
+- [Recent Updates / Changelog](#recent-updates--changelog)
+- [Current Constraints](#current-constraints)
 
-## Overview
+## Features
 
-Friend's Chitchat is a chat system where message encryption and decryption happen in the browser. The backend stores encrypted payloads, manages authentication, user relationships, and email-based account flows.
+### Authentication and Accounts
 
-## Highlights
-
-- **[NEW] Friend request lifecycle is now explicit:** search users, send request, accept/decline in notifications, and chat only after acceptance.
-- **[NEW] Sender-side friend request confirmation is a smooth popup toast** instead of being added to the notification panel.
-- **[NEW] Receiver-side pending requests stay in the notification section** with `Accept` and `Decline` actions.
-- **[NEW] Right-click thread menu now supports `Remove friend`**, which removes the relationship for both users.
-- **[NEW] Friend-request logic is split into a dedicated backend router**: `backend/app/routers/friend_request.py`.
-
-## Architecture
-
-### Backend
-
-- Framework: FastAPI
-- ORM: SQLAlchemy
-- Database: PostgreSQL
-- Authentication: JWT (`python-jose`)
-- Password hashing: `passlib` + `bcrypt`
-- Email delivery: SMTP (`smtplib`)
-- Realtime transport: WebSocket (`/ws/messages`)
-
-### Frontend
-
-- Framework: React (Create React App)
-- Routing: React Router
-- HTTP client: Axios
-- Crypto: Web Crypto API (ECDH + AES-GCM + PBKDF2)
-
-## Feature Set
-
-### Account and Authentication
-
-- User signup with `name`, `username`, `email`, and `password`
-- Login using either email or username
-- Case-insensitive email normalization to prevent duplicate accounts
-- Unique username enforcement
-- Email verification required before successful login
-- Password reset with one-time code and expiration
-- JWT access tokens with configurable expiration
-- Protected backend routes via bearer token dependency
-- Protected frontend route (`/home`) with token expiry checks
-- Automatic client logout/redirect on unauthorized (`401`) API responses
+- Signup with `name`, `username`, `email`, and password
+- Login with email or username
+- Duplicate protection for email and username
+- Email verification flow before login is allowed
+- Password reset flow with expiring one-time code
+- JWT-based authentication for protected REST endpoints and WebSocket sessions
+- Frontend token-expiry and unauthorized-session handling (`401` auto-redirect)
 
 ### End-to-End Encryption (E2EE)
 
 - Browser generates ECDH P-256 identity key pair
-- Private key is encrypted locally using password-derived AES-GCM key
-- Key derivation uses PBKDF2-SHA256 with per-user random salt
-- Server stores only encrypted private key bundle and public key
-- Shared conversation keys are derived per friend with ECDH
-- Messages are encrypted/decrypted client-side before send/after receive
-- Shared keys are cached in-memory per session for performance
+- Private key is encrypted locally with password-derived AES-GCM key (PBKDF2-SHA256)
+- Server stores encrypted private key bundle + public key only
+- Shared conversation key is derived per friend via ECDH
+- Message encryption/decryption happens in the browser
+- Last-message preview and full chat history are decrypted client-side
 
-### Chat and Contacts
+### Friend Graph and Requests
 
-- Search users by name, username, or email
-- Send friend requests to users from search results
-- Accept or decline incoming friend requests from the notification section
-- Sender gets a popup toast when a request is sent
-- Chat is enabled only after a request is accepted
-- List all friends
-- Remove a friend from the right-click thread context menu
-- List chat threads with last-message metadata
-- Load full message history for a selected friend chat
-- Send encrypted messages (WebSocket primary path)
-- HTTP message send fallback endpoint available
-- Edit previously sent messages (sender only)
-- Delete message for yourself (`scope=me`)
+- User search by name, username, or email
+- Relationship state in search results (`none`, `friend`, `incoming_request`, `outgoing_request`)
+- Friend requests: send, list pending, accept, decline
+- Real-time friend-request notifications over WebSocket
+- Remove friend (both directions), with request cleanup and realtime sync
+
+### Messaging and Chat Lifecycle
+
+- Realtime message send/receive over WebSocket (`/ws/messages`)
+- Chat thread listing with latest message metadata
+- Message history fetch per friend
+- Edit own messages
+- Delete message for me (`scope=me`)
 - Delete message for everyone (`scope=everyone`, sender only)
-- Delete/clear entire conversation from your own account
+- Clear entire conversation from current account
 - Soft-delete visibility flags per participant
-
-### Realtime Messaging
-
-- WebSocket authentication using JWT query token
-- Multi-connection fan-out per user
-- Live event stream includes new messages, edits, deletes, and conversation clears
-- Live friend events include request sent/received/accepted/declined and friend removal sync
-- Frontend socket state indicator (`connecting`, `connected`, `disconnected`, `error`)
 
 ### Frontend UX
 
-- Public landing page
-- Signup, login, email verification, and forgot-password flows
-- Secure chat unlock screen (password required to decrypt private key)
-- Searchable chat list and searchable user list
-- Context menu actions for message edit/delete, chat delete, and friend removal
+- Landing page, signup, login, verify-email, forgot-password flows
+- Protected `/home` route
+- Encryption unlock gate (password required to decrypt private key)
+- Notification panel for incoming friend requests and status alerts
+- Right-click context menu actions for messages and chat threads
 - Light/dark theme toggle persisted in local storage
-- Toast/status messaging for auth and recovery flows
+- Retry/backoff behavior for retryable API/network failures
 
-## Security Model
+### `backend/Max` (In Progress)
 
-- Passwords are hashed server-side with bcrypt before storage
-- JWTs are verified on protected routes and WebSocket handshakes
-- Email verification and reset codes are time-limited
-- Email input is normalized (`trim + lowercase`) before lookup/storage
-- Private encryption keys are never stored in plaintext on the backend
-- Chat payload persistence is encrypted (`ciphertext` + `iv`) rather than plaintext
+- TinyStories data download script
+- SentencePiece BPE tokenizer training script
+- Character-level GPT training script (`train_gpt.py`)
+- Experimental notebook (`build.ipynb`)
 
-## API Reference
+## Tech Stack
 
-### Public Endpoints
+### Backend
+
+- Python, FastAPI, Uvicorn
+- SQLAlchemy ORM
+- PostgreSQL
+- JWT auth via `python-jose`
+- Password hashing via `passlib` + `bcrypt`
+- Email sending via SMTP (`smtplib`)
+- WebSocket realtime transport
+
+### Frontend
+
+- React 19 (Create React App)
+- React Router DOM 7
+- Axios
+- Web Crypto API (ECDH, PBKDF2, AES-GCM)
+
+### ML / GPT Workspace (`backend/Max`)
+
+- PyTorch
+- Hugging Face `datasets`
+- SentencePiece
+
+## Installation and Setup
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js + npm
+- PostgreSQL
+- SMTP credentials (for verification/reset emails)
+
+### 1) Backend Setup
+
+```bash
+cd backend
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+# source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Create `backend/.env.dev`:
+
+```ini
+ENVIRONMENT=development
+DATABASE_URL=postgresql://chatapp:yourpassword@localhost:5432/chatapp
+SECRET_KEY=change-me
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_user
+SMTP_PASSWORD=your_smtp_password
+SMTP_FROM_EMAIL=no-reply@example.com
+SMTP_USE_TLS=true
+```
+
+Run backend:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+### 2) Frontend Setup
+
+```bash
+cd frontend
+npm install
+```
+
+Create `frontend/.env` (or copy from `.env.example`):
+
+```ini
+REACT_APP_API_BASE_URL=http://127.0.0.1:8000
+REACT_APP_WS_BASE_URL=ws://127.0.0.1:8000
+```
+
+Run frontend:
+
+```bash
+cd frontend
+npm start
+```
+
+### 3) Optional Production Environment Selection
+
+The backend chooses env file based on `ENVIRONMENT` at process start:
+
+- `ENVIRONMENT=development` -> loads `backend/.env.dev`
+- `ENVIRONMENT=production` -> loads `backend/.env.prod`
+
+For production mode, set `ENVIRONMENT=production` in your shell or hosting environment before starting Uvicorn.
+
+### 4) Optional `backend/Max` Workspace
+
+This part is experimental and separate from the chat runtime.
+
+Tokenizer training:
+
+```bash
+cd backend/Max
+python tokenizer/train_bpe_tokenizer.py --input_file data/raw/tinystories.txt --output_dir output --vocab_size 8000
+```
+
+GPT training:
+
+```bash
+cd backend/Max
+python scripts/train_gpt.py --data-path data/raw/tinystories.txt --checkpoint-path checkpoints/gpt_char.pt
+```
+
+Note: `data/raw/download_data.py` currently contains a hardcoded local Windows path and may require editing before use on another machine.
+
+## API Endpoints
+
+Base URL examples:
+
+- Local: `http://127.0.0.1:8000`
+- Production (frontend default fallback): `https://friends-chitchat-ypqb.onrender.com`
+
+### Public REST Endpoints
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | Basic API reachability endpoint |
-| `POST` | `/signup` | Register new user |
+| `GET` | `/` | Root endpoint (currently returns `null`) |
+| `POST` | `/signup` | Register a new user |
 | `POST` | `/login` | Login with email/username + password |
-| `POST` | `/verification/request` | Send/resend verification code |
-| `POST` | `/verification/confirm` | Confirm email with code |
+| `POST` | `/verification/request` | Request/resend verification code |
+| `POST` | `/verification/confirm` | Verify email with code |
 | `POST` | `/password/forgot` | Request password reset code |
-| `POST` | `/password/reset` | Reset password using code |
+| `POST` | `/password/reset` | Reset password with code |
 
 ### Authenticated REST Endpoints
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/me` | Get current user profile |
-| `GET` | `/users/search?q=...` | Search users (min query length 2, includes relationship status) |
+| `GET` | `/me` | Current user profile |
+| `GET` | `/users/search?q=...` | Search users with relationship status |
 | `POST` | `/friend-requests/{receiver_id}` | Send friend request |
-| `GET` | `/friend-requests` | List pending incoming/outgoing friend requests |
-| `POST` | `/friend-requests/{request_id}/accept` | Accept pending friend request |
-| `POST` | `/friend-requests/{request_id}/decline` | Decline pending friend request |
-| `POST` | `/friends/{friend_id}` | Backward-compatible alias to send friend request |
+| `GET` | `/friend-requests` | List pending incoming/outgoing requests |
+| `POST` | `/friend-requests/{request_id}/accept` | Accept request |
+| `POST` | `/friend-requests/{request_id}/decline` | Decline request |
+| `POST` | `/friends/{friend_id}` | Backward-compatible alias to send request |
 | `GET` | `/friends` | List friends |
 | `DELETE` | `/friends/{friend_id}` | Remove friend (both directions) |
-| `GET` | `/chats` | List chat threads with last message metadata |
-| `GET` | `/chats/{friend_id}/messages` | List visible messages for chat |
-| `POST` | `/chats/{friend_id}/messages` | Send encrypted message (HTTP fallback) |
-| `PATCH` | `/chats/{friend_id}/messages/{message_id}` | Edit own encrypted message |
-| `DELETE` | `/chats/{friend_id}/messages/{message_id}?scope=me` | Delete one message for current user |
-| `DELETE` | `/chats/{friend_id}/messages/{message_id}?scope=everyone` | Delete one message for both users |
-| `DELETE` | `/chats/{friend_id}` | Clear full conversation for current user |
-| `GET` | `/crypto/profile` | Fetch encrypted key bundle |
+| `GET` | `/chats` | List chat threads |
+| `GET` | `/chats/{friend_id}/messages` | List visible messages in a chat |
+| `POST` | `/chats/{friend_id}/messages` | Send encrypted message via HTTP fallback |
+| `PATCH` | `/chats/{friend_id}/messages/{message_id}` | Edit own message |
+| `DELETE` | `/chats/{friend_id}/messages/{message_id}?scope=me` | Delete for current user |
+| `DELETE` | `/chats/{friend_id}/messages/{message_id}?scope=everyone` | Delete for both users (sender only) |
+| `DELETE` | `/chats/{friend_id}` | Clear conversation for current user |
+| `GET` | `/crypto/profile` | Read encrypted key bundle |
 | `POST` | `/crypto/profile` | Create/update encrypted key bundle |
 
 ### WebSocket Endpoint
 
 | Protocol | Endpoint | Purpose |
 | --- | --- | --- |
-| `WS` | `/ws/messages?token=<jwt>` | Realtime encrypted message transport |
+| `WS` | `/ws/messages?token=<jwt>` | Realtime encrypted messaging and friend/chat event sync |
 
-## Frontend Routes
+## Usage Instructions
 
-| Route | Access | Purpose |
-| --- | --- | --- |
-| `/` | Public | Landing page |
-| `/login` | Public | Login |
-| `/signup` | Public | Registration |
-| `/verify-email` | Public | Verification code flow |
-| `/forgot-password` | Public | Password reset flow |
-| `/home` | Protected | Main chat UI |
-| `*` | Public | Redirects to `/` |
+1. Start backend and frontend.
+2. Create an account from `/signup`.
+3. Verify your email on `/verify-email`.
+4. Log in on `/login`.
+5. Unlock encryption keys in `/home` with your account password.
+6. Use "New chat" to search users and send friend requests.
+7. Accept/decline incoming requests from notifications.
+8. After acceptance, open chat and send messages.
+9. Right-click messages to edit/delete; right-click a thread to remove friend or clear chat.
 
-## Environment Configuration
-
-Create `backend/.env` with:
-
-```ini
-database_hostname=localhost
-database_port=5432
-database_name=chatapp
-database_username=chatapp
-database_password=yourpassword
-secret_key=change-me
-algorithm=HS256
-access_token_expire_minutes=60
-smtp_host=smtp.example.com
-smtp_port=587
-smtp_user=youruser
-smtp_password=yourpassword
-smtp_from_email=no-reply@example.com
-smtp_use_tls=true
-```
-
-Notes:
-
-- If `access_token_expire_minutes` is set to a positive value, `exp` is added to JWTs.
-- Backend auto-creates database tables on startup for development.
-- Backend also backfills newer `chatting` columns (`edited_at`, delete flags) if missing.
-
-Frontend API defaults:
-
-- HTTP API base URL: `http://127.0.0.1:8000` (override with `REACT_APP_API_BASE_URL`)
-- WebSocket base URL: `ws://127.0.0.1:8000` (override with `REACT_APP_WS_BASE_URL`)
-
-Create `frontend/.env` (or set variables in your hosting dashboard):
-
-```ini
-REACT_APP_API_BASE_URL=https://your-backend-domain.com
-REACT_APP_WS_BASE_URL=wss://your-backend-domain.com
-```
-
-## Database Setup and Structure
-
-### PostgreSQL Setup (Local)
-
-Create a database user and database (replace values as needed):
-
-```sql
-CREATE USER chatapp WITH PASSWORD 'yourpassword';
-CREATE DATABASE chatapp OWNER chatapp;
-GRANT ALL PRIVILEGES ON DATABASE chatapp TO chatapp;
-```
-
-Set matching values in `backend/.env`:
-
-```ini
-database_hostname=localhost
-database_port=5432
-database_name=chatapp
-database_username=chatapp
-database_password=yourpassword
-```
-
-Start the backend once to auto-create tables:
-
-```bash
-cd backend
-uvicorn app.main:app --reload
-```
-
-### Schema Structure
-
-The backend uses SQLAlchemy models and creates these tables:
-
-| Table | Purpose | Primary Key | Key Relationships |
-| --- | --- | --- | --- |
-| `users` | User account and crypto profile data | `id` | Referenced by `verified_users.owner_id`, `password_resets.owner_id`, `friends.owner_id`, `friends.friend_id`, `friend_requests.sender_id`, `friend_requests.receiver_id`, `chatting.sender_id`, `chatting.receiver_id` |
-| `verified_users` | Email verification state/code per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
-| `password_resets` | Password reset code lifecycle per user | `id` | `owner_id -> users.id` (`CASCADE`, unique one-to-one) |
-| `friends` | User-to-user contact mapping | `id` | `owner_id -> users.id`, `friend_id -> users.id`, unique pair on (`owner_id`, `friend_id`) |
-| `friend_requests` | Friend request lifecycle state | `id` | `sender_id -> users.id`, `receiver_id -> users.id`, unique pair on (`sender_id`, `receiver_id`) |
-| `chatting` | Encrypted message storage | `id` | `sender_id -> users.id`, `receiver_id -> users.id` |
-
-### Chat Table Fields
-
-`chatting` contains encryption and message-lifecycle fields:
-
-- `ciphertext`, `iv`: encrypted payload
-- `crypto_version`: crypto format/version marker
-- `is_deleted_for_everyone`: delete-for-all state
-- `deleted_for_sender`, `deleted_for_receiver`: per-user soft delete flags
-- `edited_at`: timestamp when a message is edited
-- `created_at`: message creation timestamp
-
-### Migration Behavior
-
-- Development startup runs `Base.metadata.create_all(...)` to create missing tables.
-- Startup also runs defensive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for newer `chatting` columns to keep older local DBs compatible.
-- For production environments, move schema changes to Alembic migration scripts.
-
-## Local Development Setup
-
-### Prerequisites
-
-- Node.js + npm
-- Python 3.x + pip
-- PostgreSQL
-- SMTP credentials for email flows
-
-### Start Backend
-
-```bash
-cd backend
-python -m venv .venv
-# Activate the virtual environment in your shell
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Start Frontend
-
-```bash
-cd frontend
-npm install
-npm start
-```
-
-App URLs:
-
-- Frontend: `http://localhost:3000`
-- Backend: `http://127.0.0.1:8000`
-
-## Project Structure
+## Folder Structure
 
 ```text
 backend/
   app/
     authentication/        # JWT + password utilities
-    configaration/         # Environment settings
-    database_configure/    # SQLAlchemy engine + models
-    E2EE/                  # Crypto profile API
-    routers/               # Auth, users, chat, friend requests, verification, reset, websocket
-    schema/                # Pydantic schemas
-    Websocket_configure/   # Connection manager runtime
+    configaration/         # ENV loader + settings
+    database_configure/    # SQLAlchemy engine + ORM models
+    E2EE/                  # Crypto profile routes
+    routers/               # Auth, user, chat, friend-request, verification, reset, websocket
+    schema/                # Pydantic request/response schemas
+    Websocket_configure/   # In-memory connection manager
+  Max/                     # Experimental GPT/tokenizer workspace
   requirements.txt
 
 frontend/
   src/
-    api/                   # Axios + endpoint wrappers + websocket helper
+    api/                   # Axios clients + endpoint wrappers + ws helper
     auth/                  # Auth context
-    crypto/                # Crypto context + browser crypto service
-    pages/                 # UI routes
+    crypto/                # Browser crypto context/service
+    pages/                 # Route-level pages
     components/            # Shared UI components
-    styles/                # CSS
+    styles/                # CSS styles
 ```
 
-## Known Constraints
+## Recent Updates / Changelog
+
+### 2026-03-19
+
+- Added `backend/Max` workspace for GPT/tokenizer experimentation.
+- Added tokenizer artifacts and tiny-model config placeholders.
+
+### 2026-03-17
+
+- Refined environment handling with `.env.dev` / `.env.prod` loader support.
+- Updated database configuration around environment-driven `DATABASE_URL`.
+- Improved signup/verification flows and frontend API base config (`frontend/.env.example`).
+- Added Axios retry/backoff behavior for retryable network/server errors.
+
+### 2026-03-15
+
+- Added full friend-request lifecycle (send/list/accept/decline) and dedicated router.
+- Added friend removal with realtime sync and request cleanup.
+- Improved WebSocket + serialization event handling for friend and chat updates.
+- Expanded chat UI behavior and deployment-related backend adjustments.
+
+### 2026-03-14
+
+- Added message lifecycle operations: edit, delete for me, delete for everyone.
+- Added conversation clear endpoint and related realtime events.
+- Enhanced notification section and context-menu interactions in chat UI.
+
+### 2026-03-08
+
+- Added browser-side E2EE key management and encrypted messaging flow.
+
+### 2026-02-08 to 2026-02-21
+
+- Initial project setup and rename to Friend's Chitchat.
+- Implemented signup/login, email verification, password reset, and user search.
+
+### Current Uncommitted Local Changes
+
+- `backend/Max/scripts/build.ipynb` modified
+- `backend/Max/scripts/train_gpt.py` added (new)
+
+## Current Constraints
 
 - WebSocket connection manager is in-memory and process-local.
-- For multi-instance or multi-worker deployments, add a shared pub/sub layer (for example Redis) for cross-instance realtime fan-out.
+- Multi-instance deployments require shared pub/sub (for example, Redis) for cross-instance fan-out.
+- Startup uses `Base.metadata.create_all(...)` and runtime column backfill for `chatting`; production should use migration scripts.
+- `backend/Max/run_pipeline.ps1` currently references script names that are not present in the current folder layout.
