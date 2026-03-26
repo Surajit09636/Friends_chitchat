@@ -69,10 +69,12 @@ This repository also contains an in-progress `backend/Max` workspace for small G
 
 ### `backend/Max` (In Progress)
 
-- TinyStories data download script
-- SentencePiece BPE tokenizer training script
-- Character-level GPT training script (`train_gpt.py`)
-- Experimental notebook (`build.ipynb`)
+- TinyStories download helper (`data/raw/download_data.py`)
+- SentencePiece BPE tokenizer training script (`tokenizer/train_bpe_tokenizer.py`)
+- Character-level GPT training script (`scripts/train_gpt.py`)
+- Checkpoint chat/inference CLI (`tinyllm/chat.py`)
+- Experiment notebooks (`scripts/build.ipynb`, `scripts/finetuning.ipynb`)
+- Ollama model template (`models/MODELFILE`) for local GGUF serving
 
 ## Tech Stack
 
@@ -177,6 +179,13 @@ For production mode, set `ENVIRONMENT=production` in your shell or hosting envir
 
 This part is experimental and separate from the chat runtime.
 
+Download TinyStories subset:
+
+```bash
+cd backend/Max
+python data/raw/download_data.py
+```
+
 Tokenizer training:
 
 ```bash
@@ -190,6 +199,19 @@ GPT training:
 cd backend/Max
 python scripts/train_gpt.py --data-path data/raw/tinystories.txt --checkpoint-path checkpoints/gpt_char.pt
 ```
+
+Run inference/chat from a checkpoint:
+
+```bash
+cd backend/Max
+python tinyllm/chat.py --checkpoint-path checkpoints/gpt_char.pt --prompt "Once upon a time"
+# Interactive mode:
+python tinyllm/chat.py --checkpoint-path checkpoints/gpt_char.pt
+```
+
+Fine-tuning notebook:
+
+- `backend/Max/scripts/finetuning.ipynb` contains an Unsloth + LoRA workflow and saves outputs to `my_model/` (often archived as `my_model.zip` at repo root).
 
 Note: `data/raw/download_data.py` currently contains a hardcoded local Windows path and may require editing before use on another machine.
 
@@ -265,7 +287,12 @@ backend/
     routers/               # Auth, user, chat, friend-request, verification, reset, websocket
     schema/                # Pydantic request/response schemas
     Websocket_configure/   # In-memory connection manager
-  Max/                     # Experimental GPT/tokenizer workspace
+  Max/                     # Experimental GPT/tokenizer + finetuning workspace
+    data/raw/              # TinyStories text data + downloader
+    tokenizer/             # SentencePiece training utility
+    scripts/               # build/train/finetuning scripts and notebooks
+    tinyllm/               # checkpoint chat/inference CLI
+    models/                # local GGUF + MODELFILE template
   requirements.txt
 
 frontend/
@@ -279,6 +306,14 @@ frontend/
 ```
 
 ## Recent Updates / Changelog
+
+### 2026-03-26
+
+- Added `backend/Max/tinyllm/chat.py` for checkpoint-based text generation (single prompt and interactive modes).
+- Added `backend/Max/scripts/finetuning.ipynb` for Unsloth + LoRA fine-tuning experiments on custom datasets.
+- Removed legacy Max pipeline scaffolding (`backend/Max/configs/tiny_4gb.yaml`, `backend/Max/run_pipeline.ps1`).
+- Updated `backend/Max/.gitignore` to keep placeholders tracked while ignoring local artifacts/models.
+- Added `my_model.zip` at repo root as a packaged fine-tuned model output.
 
 ### 2026-03-19
 
@@ -314,14 +349,9 @@ frontend/
 - Initial project setup and rename to Friend's Chitchat.
 - Implemented signup/login, email verification, password reset, and user search.
 
-### Current Uncommitted Local Changes
-
-- `backend/Max/scripts/build.ipynb` modified
-- `backend/Max/scripts/train_gpt.py` added (new)
-
 ## Current Constraints
 
 - WebSocket connection manager is in-memory and process-local.
 - Multi-instance deployments require shared pub/sub (for example, Redis) for cross-instance fan-out.
 - Startup uses `Base.metadata.create_all(...)` and runtime column backfill for `chatting`; production should use migration scripts.
-- `backend/Max/run_pipeline.ps1` currently references script names that are not present in the current folder layout.
+- `backend/Max/data/raw/download_data.py` currently writes to a hardcoded Windows path and should be edited for cross-machine use.
