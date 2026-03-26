@@ -3,7 +3,7 @@ max
 __pycache__/
 *.pyc
 
-data/raw/*.txt
+data/raw/*
 data/tokenized/*.bin
 artifacts/*
 !artifacts/.gitkeep
@@ -11,3 +11,4 @@ checkpoints/*
 !checkpoints/.gitkeep
 outputs/*
 !outputs/.gitkeep
+models/*
